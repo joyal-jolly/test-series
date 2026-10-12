@@ -1,0 +1,386 @@
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { PortalLayout } from '../components/Layouts';
+import PDFAnnotator from '../components/PDFAnnotator';
+import { api } from '../lib/api';
+
+const reviewerLinks = [
+  { to: '/reviewer', label: 'Dashboard', end: true },
+  { to: '/reviewer/assignments', label: 'Assigned evaluations' },
+];
+
+// ─── Reviewer Dashboard ───────────────────────────────────────────────────────
+export function ReviewerDashboard() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    api('/api/reviewer/dashboard').then(setData);
+  }, []);
+
+  return (
+    <PortalLayout title="Reviewer portal" links={reviewerLinks}>
+      {!data ? (
+        <p className="muted">Loading…</p>
+      ) : (
+        <>
+          <div className="stats-grid">
+            <div className="stat-tile">
+              <strong>{data.pendingCount}</strong>
+              <span>Pending</span>
+            </div>
+            <div className="stat-tile">
+              <strong>{data.completedCount}</strong>
+              <span>Completed</span>
+            </div>
+          </div>
+          <div className="panel">
+            <h2>Recent assignments</h2>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Paper</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.recentAssignments.map((a) => (
+                  <tr key={a.id}>
+                    <td>{a.studentName}</td>
+                    <td>{a.paperTitle}</td>
+                    <td>
+                      <span className={`pill ${a.status}`}>{a.status}</span>
+                    </td>
+                    <td>
+                      <Link to={`/reviewer/assignments/${a.id}`}>Open</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </PortalLayout>
+  );
+}
+
+// ─── Reviewer Assignments List ────────────────────────────────────────────────
+export function ReviewerAssignments() {
+  const [assignments, setAssignments] = useState([]);
+  const [filter, setFilter] = useState('pending');
+
+  useEffect(() => {
+    api(`/api/reviewer/assignments?status=${filter}`).then((d) =>
+      setAssignments(d.assignments)
+    );
+  }, [filter]);
+
+  return (
+    <PortalLayout title="Reviewer portal" links={reviewerLinks}>
+      <div className="panel">
+        <div className="panel-head">
+          <h2>Assigned evaluations</h2>
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+            <option value="">All</option>
+          </select>
+        </div>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Paper</th>
+              <th>Assigned</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {assignments.map((a) => (
+              <tr key={a.id}>
+                <td>{a.studentName}</td>
+                <td>{a.paperTitle}</td>
+                <td>{a.assignedAt ? new Date(a.assignedAt).toLocaleString() : '—'}</td>
+                <td>
+                  <span className={`pill ${a.status}`}>{a.status}</span>
+                </td>
+                <td>
+                  <Link to={`/reviewer/assignments/${a.id}`}>Review</Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </PortalLayout>
+  );
+}
+
+// ─── Full-page Review Interface ───────────────────────────────────────────────
+export function ReviewSubmissionPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [feedback, setFeedback] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftMsg, setDraftMsg] = useState(null); // { ok: bool, text: string }
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+
+  // Which PDF is visible in the left panel: 'answer' | 'paper'
+  // IMPORTANT: Both PDFAnnotator instances stay MOUNTED at all times so that
+  // annotations drawn on one are never lost when the user switches tabs.
+  // Only CSS display changes.
+  const [viewMode, setViewMode] = useState('answer');
+
+  useEffect(() => {
+    api(`/api/reviewer/assignments/${id}`)
+      .then((d) => {
+        setData(d);
+        // Prefer the final evaluation feedback; fall back to saved draft
+        const savedFeedback =
+          d.evaluation?.feedback ||
+          d.assignment?.draftFeedback ||
+          '';
+        setFeedback(savedFeedback);
+        if (d.assignment?.draftSavedAt && !d.evaluation) {
+          setLastSavedAt(new Date(d.assignment.draftSavedAt));
+        }
+      })
+      .catch((e) => setError(e.message));
+  }, [id]);
+
+  async function saveDraft() {
+    setDraftBusy(true);
+    setDraftMsg(null);
+    try {
+      const result = await api(`/api/reviewer/assignments/${id}/draft`, {
+        method: 'PATCH',
+        body: { feedback },
+      });
+      const saved = new Date(result.savedAt);
+      setLastSavedAt(saved);
+      setDraftMsg({ ok: true, text: 'Draft saved!' });
+    } catch (err) {
+      setDraftMsg({ ok: false, text: err.message || 'Failed to save draft' });
+    } finally {
+      setDraftBusy(false);
+      setTimeout(() => setDraftMsg(null), 3000);
+    }
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      // Per-question marks UI is removed; auto-generate 0-mark entries for backend
+      const questionMarks = (data.assignment.questions || []).map((q) => ({
+        questionId: q.id,
+        marksAwarded: 0,
+        feedback: '',
+      }));
+      await api(`/api/reviewer/assignments/${id}/evaluate`, {
+        method: 'POST',
+        body: { feedback, questionMarks },
+      });
+      navigate('/reviewer/assignments');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ── Loading / error states ───────────────────────────────────────────────────
+  if (error && !data) {
+    return (
+      <div className="rev-shell">
+        <div className="rev-topbar">
+          <Link to="/reviewer/assignments" className="rev-back-btn">← Back</Link>
+          <span className="rev-topbar-title">Review Submission</span>
+        </div>
+        <div style={{ padding: '2rem' }}>
+          <p className="error">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="rev-shell">
+        <div className="rev-topbar">
+          <Link to="/reviewer/assignments" className="rev-back-btn">← Back</Link>
+          <span className="rev-topbar-title">Review Submission</span>
+        </div>
+        <div className="rev-loading">
+          <div className="pdfan-spinner" />
+          <p>Loading assignment…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const { assignment } = data;
+  const completed = assignment.status === 'evaluated';
+
+  // Build absolute URLs (needed for PDF.js cross-origin loading)
+  function buildUrl(path) {
+    if (!path) return null;
+    const { protocol, hostname, port } = window.location;
+    return `${protocol}//${hostname}${port ? ':' + port : ''}${path}`;
+  }
+
+  const answerUrl = buildUrl(assignment.answerFileUrl);
+  const paperPdfUrl = buildUrl(assignment.pdfUrl);
+
+  return (
+    <div className="rev-shell">
+
+      {/* ── Top bar ── */}
+      <div className="rev-topbar">
+        <Link to="/reviewer/assignments" className="rev-back-btn">← Assignments</Link>
+
+        <div className="rev-topbar-info">
+          <span className="rev-topbar-title">{assignment.paperTitle}</span>
+          <span className="rev-topbar-meta">
+            {assignment.studentName} · {assignment.studentEmail}
+          </span>
+        </div>
+
+        {/* Tab toggle — both annotators remain mounted */}
+        <div className="rev-view-toggle">
+          <button
+            className={`rev-toggle-btn${viewMode === 'answer' ? ' active' : ''}`}
+            onClick={() => setViewMode('answer')}
+          >
+            📝 Student Answer
+          </button>
+          {paperPdfUrl && (
+            <button
+              className={`rev-toggle-btn${viewMode === 'paper' ? ' active' : ''}`}
+              onClick={() => setViewMode('paper')}
+            >
+              📋 Question Paper
+            </button>
+          )}
+        </div>
+
+        <span
+          className={`pill ${assignment.status}`}
+          style={{ marginLeft: 'auto', flexShrink: 0 }}
+        >
+          {assignment.status}
+        </span>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="rev-body">
+
+        {/* Left: PDF panel — both annotators always mounted, only visibility toggles */}
+        <div className="rev-pdf-panel">
+
+          {/* Student answer (always in DOM) */}
+          <div
+            style={{
+              display: viewMode === 'answer' ? 'flex' : 'none',
+              flex: 1,
+              flexDirection: 'column',
+              minHeight: 0,
+            }}
+          >
+            {answerUrl ? (
+              <PDFAnnotator pdfUrl={answerUrl} />
+            ) : (
+              <div className="rev-no-pdf">
+                <div style={{ fontSize: '3rem' }}>📄</div>
+                <h3>No answer uploaded</h3>
+                <p className="muted">The student has not submitted an answer file.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Question paper (always in DOM if available) */}
+          {paperPdfUrl && (
+            <div
+              style={{
+                display: viewMode === 'paper' ? 'flex' : 'none',
+                flex: 1,
+                flexDirection: 'column',
+                minHeight: 0,
+              }}
+            >
+              <PDFAnnotator pdfUrl={paperPdfUrl} />
+            </div>
+          )}
+
+        </div>
+
+        {/* Right: Evaluation panel — only overall feedback, not required */}
+        <aside className="rev-eval-panel">
+          <div className="rev-eval-scroll">
+            <h3 className="rev-eval-heading">📊 Evaluation</h3>
+
+            {completed && (
+              <div className="rev-already-done">
+                ✅ This submission has already been evaluated.
+              </div>
+            )}
+
+            <form className="form rev-eval-form" onSubmit={submit}>
+              <label>
+                Overall feedback
+                <textarea
+                  rows={8}
+                  disabled={completed}
+                  value={feedback}
+                  placeholder="Write your feedback to the student… (optional)"
+                  onChange={(e) => setFeedback(e.target.value)}
+                />
+              </label>
+
+              {error && <p className="error">{error}</p>}
+
+              {!completed && (
+                <div className="rev-action-row">
+                  {/* Save Draft */}
+                  <button
+                    type="button"
+                    className="btn rev-draft-btn"
+                    disabled={draftBusy || busy}
+                    onClick={saveDraft}
+                  >
+                    {draftBusy ? '💾 Saving…' : '💾 Save draft'}
+                  </button>
+
+                  {/* Submit */}
+                  <button className="btn primary rev-submit-btn" disabled={busy || draftBusy}>
+                    {busy ? 'Submitting…' : '✅ Submit evaluation'}
+                  </button>
+                </div>
+              )}
+
+              {/* Draft status message */}
+              {draftMsg && (
+                <div className={`rev-draft-toast ${draftMsg.ok ? 'ok' : 'err'}`}>
+                  {draftMsg.ok ? '✅' : '⚠️'} {draftMsg.text}
+                </div>
+              )}
+
+              {/* Last saved timestamp */}
+              {lastSavedAt && !completed && (
+                <p className="rev-draft-meta">
+                  Last saved: {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </p>
+              )}
+            </form>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
