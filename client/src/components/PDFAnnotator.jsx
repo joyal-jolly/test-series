@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -141,7 +141,8 @@ function buildPreview(s, ex, ey) {
 
 // ─── PDFAnnotator Component ────────────────────────────────────────────────────
 // Renders ALL pages in a continuous scrollable column. No page-by-page navigation.
-export default function PDFAnnotator({ pdfUrl }) {
+// Exposes exportAnnotatedPdf() via ref → returns a Blob of the flat annotated PDF.
+const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
   // PDF state
   const [numPages, setNumPages] = useState(0);
   const [scale, setScale] = useState(1.3);
@@ -182,6 +183,44 @@ export default function PDFAnnotator({ pdfUrl }) {
   const containerRef = useRef(null);
   const wrapperRef = useRef(null);
   const pdfDocRef = useRef(null);
+
+  // ── Export annotated PDF ──────────────────────────────────────────────────────
+  // Merges each PDF canvas + annotation canvas into a new PDF and returns a Blob.
+  useImperativeHandle(ref, () => ({
+    async exportAnnotatedPdf() {
+      const doc = pdfDocRef.current;
+      if (!doc) throw new Error('PDF not loaded');
+
+      // Dynamically import pdf-lib only when needed
+      const { PDFDocument } = await import('pdf-lib');
+      const newPdf = await PDFDocument.create();
+
+      for (let pn = 1; pn <= doc.numPages; pn++) {
+        const pdfCanvas   = pdfCanvasRefs.current[pn];
+        const annotCanvas = annotCanvasRefs.current[pn];
+        if (!pdfCanvas) continue;
+
+        // Composite both canvases onto an off-screen canvas
+        const merged = document.createElement('canvas');
+        merged.width  = pdfCanvas.width;
+        merged.height = pdfCanvas.height;
+        const mctx = merged.getContext('2d');
+        mctx.drawImage(pdfCanvas, 0, 0);
+        if (annotCanvas) mctx.drawImage(annotCanvas, 0, 0);
+
+        // Convert to JPEG bytes and embed in the new PDF
+        const dataUrl = merged.toDataURL('image/jpeg', 0.92);
+        const base64  = dataUrl.split(',')[1];
+        const bytes   = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+        const jpgImg  = await newPdf.embedJpg(bytes);
+        const page    = newPdf.addPage([merged.width, merged.height]);
+        page.drawImage(jpgImg, { x: 0, y: 0, width: merged.width, height: merged.height });
+      }
+
+      const pdfBytes = await newPdf.save();
+      return new Blob([pdfBytes], { type: 'application/pdf' });
+    },
+  }));
 
   // Sync refs with state
   useEffect(() => { toolRef.current = tool; }, [tool]);
@@ -706,4 +745,6 @@ export default function PDFAnnotator({ pdfUrl }) {
       </div>
     </div>
   );
-}
+});
+
+export default PDFAnnotator;

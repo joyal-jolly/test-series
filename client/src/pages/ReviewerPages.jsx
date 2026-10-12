@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PortalLayout } from '../components/Layouts';
 import PDFAnnotator from '../components/PDFAnnotator';
@@ -129,6 +129,10 @@ export function ReviewSubmissionPage() {
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftMsg, setDraftMsg] = useState(null); // { ok: bool, text: string }
   const [lastSavedAt, setLastSavedAt] = useState(null);
+  const [exportStatus, setExportStatus] = useState(''); // '' | 'exporting' | 'uploading'
+
+  // Ref to the answer PDFAnnotator so we can call exportAnnotatedPdf()
+  const answerAnnotatorRef = useRef(null);
 
   // Which PDF is visible in the left panel: 'answer' | 'paper'
   // IMPORTANT: Both PDFAnnotator instances stay MOUNTED at all times so that
@@ -176,6 +180,30 @@ export function ReviewSubmissionPage() {
     e.preventDefault();
     setBusy(true);
     setError('');
+    let annotatedPdfUrl = null;
+    try {
+      // Step 1: Export the annotated answer PDF
+      if (answerAnnotatorRef.current) {
+        setExportStatus('exporting');
+        const blob = await answerAnnotatorRef.current.exportAnnotatedPdf();
+
+        // Step 2: Upload the annotated PDF to the server
+        setExportStatus('uploading');
+        const form = new FormData();
+        form.append('annotatedPdf', blob, 'annotated.pdf');
+        const uploadRes = await api(`/api/reviewer/assignments/${id}/upload-annotated`, {
+          method: 'POST',
+          body: form,
+        });
+        annotatedPdfUrl = uploadRes.url || null;
+      }
+    } catch (uploadErr) {
+      // Non-fatal: warn but continue — the reviewer's marks should still be saved
+      console.warn('Annotated PDF upload failed:', uploadErr);
+    } finally {
+      setExportStatus('');
+    }
+
     try {
       // Per-question marks UI is removed; auto-generate 0-mark entries for backend
       const questionMarks = (data.assignment.questions || []).map((q) => ({
@@ -185,7 +213,7 @@ export function ReviewSubmissionPage() {
       }));
       await api(`/api/reviewer/assignments/${id}/evaluate`, {
         method: 'POST',
-        body: { feedback, questionMarks },
+        body: { feedback, questionMarks, annotatedPdfUrl },
       });
       navigate('/reviewer/assignments');
     } catch (err) {
@@ -294,7 +322,7 @@ export function ReviewSubmissionPage() {
             }}
           >
             {answerUrl ? (
-              <PDFAnnotator pdfUrl={answerUrl} />
+              <PDFAnnotator ref={answerAnnotatorRef} pdfUrl={answerUrl} />
             ) : (
               <div className="rev-no-pdf">
                 <div style={{ fontSize: '3rem' }}>📄</div>
@@ -359,7 +387,13 @@ export function ReviewSubmissionPage() {
 
                   {/* Submit */}
                   <button className="btn primary rev-submit-btn" disabled={busy || draftBusy}>
-                    {busy ? 'Submitting…' : '✅ Submit evaluation'}
+                    {exportStatus === 'exporting'
+                      ? '📄 Exporting PDF…'
+                      : exportStatus === 'uploading'
+                        ? '☁️ Uploading…'
+                        : busy
+                          ? 'Submitting…'
+                          : '✅ Submit evaluation'}
                   </button>
                 </div>
               )}

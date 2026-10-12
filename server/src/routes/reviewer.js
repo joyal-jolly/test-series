@@ -1,7 +1,21 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ANNOTATED_DIR = path.join(__dirname, '..', '..', 'uploads', 'annotated');
+fs.mkdirSync(ANNOTATED_DIR, { recursive: true });
+
+const annotatedStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, ANNOTATED_DIR),
+  filename: (_req, _file, cb) => cb(null, `${uuid()}.pdf`),
+});
+const uploadAnnotated = multer({ storage: annotatedStorage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth, requireRole('reviewer'));
@@ -138,6 +152,25 @@ router.patch('/assignments/:id/draft', async (req, res, next) => {
   }
 });
 
+// Upload annotated PDF (called before /evaluate)
+router.post('/assignments/:id/upload-annotated', (req, res, next) => {
+  uploadAnnotated.single('annotatedPdf')(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    try {
+      const submission = await dbService.getSubmissionById(req.params.id);
+      if (!submission || submission.assignedReviewerId !== req.user.id) {
+        fs.unlink(req.file.path, () => {});
+        return res.status(404).json({ error: 'Assignment not found' });
+      }
+      const url = `/uploads/annotated/${req.file.filename}`;
+      res.json({ url });
+    } catch (err2) {
+      next(err2);
+    }
+  });
+});
+
 router.post('/assignments/:id/evaluate', async (req, res, next) => {
   try {
     const { feedback, questionMarks: rawMarks } = req.body || {};
@@ -155,6 +188,7 @@ router.post('/assignments/:id/evaluate', async (req, res, next) => {
       ? rawMarks
       : (paper?.questions || []).map((q) => ({ questionId: q.id, marksAwarded: 0, feedback: '' }));
 
+    const { annotatedPdfUrl } = req.body || {};
     const now = new Date().toISOString();
     const totalMarks = questionMarks.reduce((sum, qm) => sum + Number(qm.marksAwarded || 0), 0);
 
@@ -165,6 +199,7 @@ router.post('/assignments/:id/evaluate', async (req, res, next) => {
       reviewerId: req.user.id,
       totalMarks,
       feedback: feedback || '',
+      annotatedPdfUrl: annotatedPdfUrl || null,
       status: 'completed',
       evaluatedAt: now,
       updatedAt: now,

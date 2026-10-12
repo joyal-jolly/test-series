@@ -207,20 +207,46 @@ export const dbService = {
 
   async submitEvaluation({ evaluation, questionEvaluations, submissionId, attemptId }) {
     const now = new Date().toISOString();
-    const [evRes, qeRes, subRes, attRes] = await Promise.all([
-      supabase.from('evaluations').insert(evaluation),
-      questionEvaluations.length
-        ? supabase.from('question_evaluations').insert(questionEvaluations)
-        : Promise.resolve({}),
-      supabase.from('submissions').update({ status: 'evaluated' }).eq('id', submissionId),
+
+    // Pull annotatedPdfUrl out before inserting – it lives on submissions, not evaluations
+    const { annotatedPdfUrl, ...evalToInsert } = evaluation;
+
+    // 1. Remove any prior incomplete or duplicate evaluation for this submission
+    const { data: existingEvals } = await supabase
+      .from('evaluations')
+      .select('id')
+      .eq('submissionId', submissionId);
+
+    if (existingEvals && existingEvals.length > 0) {
+      const existingIds = existingEvals.map((e) => e.id);
+      await supabase.from('question_evaluations').delete().in('evaluationId', existingIds);
+      await supabase.from('evaluations').delete().in('id', existingIds);
+    }
+
+    // 2. Insert parent evaluation FIRST so foreign key constraint is satisfied
+    const evRes = await supabase.from('evaluations').insert(evalToInsert);
+    if (evRes.error) throw new Error(evRes.error.message);
+
+    // 3. Insert child question evaluations AFTER parent exists in database
+    if (questionEvaluations && questionEvaluations.length > 0) {
+      const qeRes = await supabase.from('question_evaluations').insert(questionEvaluations);
+      if (qeRes.error) throw new Error(qeRes.error.message);
+    }
+
+    // 4. Update submission (status + annotated PDF url) and attempt status
+    const submissionUpdate = { status: 'evaluated' };
+    if (annotatedPdfUrl) submissionUpdate.annotatedPdfUrl = annotatedPdfUrl;
+
+    const [subRes, attRes] = await Promise.all([
+      supabase.from('submissions').update(submissionUpdate).eq('id', submissionId),
       supabase.from('attempts').update({ status: 'evaluated', updatedAt: now }).eq('id', attemptId),
     ]);
-    if (evRes.error) throw new Error(evRes.error.message);
-    if (qeRes?.error) throw new Error(qeRes.error.message);
     if (subRes.error) throw new Error(subRes.error.message);
     if (attRes.error) throw new Error(attRes.error.message);
+
     return { evaluation, questionEvaluations };
   },
+
 
   // CONTACT MESSAGES
   async createContactMessage(entry) {

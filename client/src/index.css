@@ -2166,3 +2166,44 @@ label {
 .pdfan-pagecount {
   font-variant-numeric: tabular-nums;
 }
+
+/* ─── Annotated PDF box (Student Result Page) ────────────────────── */
+.annotated-pdf-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background: linear-gradient(135deg, #eff6ff 0%, #eef2ff 100%);
+  border: 1.5px solid #bfdbfe;
+  border-radius: 0.9rem;
+  padding: 1rem 1.25rem;
+  margin: 1rem 0 1.25rem;
+  box-shadow: 0 2px 12px rgba(59, 130, 246, 0.08);
+}
+
+.annotated-pdf-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 0.1rem;
+}
+
+.annotated-pdf-box strong {
+  display: block;
+  font-size: 0.95rem;
+  color: #1e40af;
+  margin-bottom: 0.15rem;
+}
+
+.annotated-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.85rem;
+  border-radius: 0.55rem;
+  text-decoration: none;
+}
+
+.annotated-pdf-btn:hover {
+  opacity: 0.88;
+}

@@ -517,48 +517,29 @@ export function ResultPage() {
             <h2>{paper.title}</h2>
             <p className="muted">Reviewed by {evaluation.reviewerName}</p>
           </div>
-          <div className="score-badge">
-            <strong>
-              {evaluation.totalMarks}/{paper.totalMarks}
-            </strong>
-            <span>Total</span>
-          </div>
         </div>
         <p>
           <strong>Overall feedback:</strong> {evaluation.feedback || '—'}
         </p>
-        {submission?.answerFileUrl && (
-          <p>
-            <a href={submission.answerFileUrl} target="_blank" rel="noreferrer">
-              Open submitted answer
-            </a>
-          </p>
+        {submission?.annotatedPdfUrl && (
+          <div className="annotated-pdf-box">
+            <span className="annotated-pdf-icon">📑</span>
+            <div>
+              <strong>Reviewed answer sheet</strong>
+              <p className="muted" style={{ margin: '0.15rem 0 0.5rem' }}>
+                Click below to view result
+              </p>
+              <a
+                href={submission.annotatedPdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn primary annotated-pdf-btn"
+              >
+                Open result
+              </a>
+            </div>
+          </div>
         )}
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Question</th>
-              <th>Marks</th>
-              <th>Feedback</th>
-            </tr>
-          </thead>
-          <tbody>
-            {evaluation.questionEvaluations.map((qe) => {
-              const q = paper.questions.find((x) => x.id === qe.questionId);
-              return (
-                <tr key={qe.id}>
-                  <td>
-                    Q{q?.number}: {q?.prompt}
-                  </td>
-                  <td>
-                    {qe.marksAwarded}/{qe.maximumMarks}
-                  </td>
-                  <td>{qe.feedback || '—'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       </div>
     </PortalLayout>
   );
