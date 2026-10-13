@@ -1,11 +1,14 @@
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { testSupabaseConnection } from './supabase.js';
 import authRoutes from './routes/auth.js';
 import papersRoutes from './routes/papers.js';
@@ -14,7 +17,6 @@ import adminRoutes from './routes/admin.js';
 import reviewerRoutes from './routes/reviewer.js';
 import contactRoutes from './routes/contact.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 4000;
 const UPLOADS = path.join(__dirname, '..', 'uploads');
 fs.mkdirSync(path.join(UPLOADS, 'answers'), { recursive: true });

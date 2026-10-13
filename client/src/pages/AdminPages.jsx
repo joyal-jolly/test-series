@@ -2,12 +2,42 @@ import { useEffect, useState } from 'react';
 import { PortalLayout } from '../components/Layouts';
 import { api } from '../lib/api';
 
-const adminLinks = [
-  { to: '/admin', label: 'Dashboard', end: true },
-  { to: '/admin/papers', label: 'Question papers' },
-  { to: '/admin/submissions', label: 'Assign reviews' },
-  { to: '/admin/users', label: 'Users' },
-];
+export function AdminPortalLayout({ children, unassignedCount }) {
+  const [pendingCount, setPendingCount] = useState(
+    typeof unassignedCount === 'number' ? unassignedCount : 0
+  );
+
+  useEffect(() => {
+    if (typeof unassignedCount === 'number') {
+      setPendingCount(unassignedCount);
+    } else {
+      api('/api/admin/dashboard')
+        .then((d) => {
+          if (d?.pendingAssignments != null) {
+            setPendingCount(d.pendingAssignments);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [unassignedCount]);
+
+  const links = [
+    { to: '/admin', label: 'Dashboard', end: true },
+    { to: '/admin/papers', label: 'Question papers' },
+    {
+      to: '/admin/submissions',
+      label: 'Assign reviews',
+      badge: pendingCount > 0 ? pendingCount : null,
+    },
+    { to: '/admin/users', label: 'Users' },
+  ];
+
+  return (
+    <PortalLayout title="Admin portal" links={links}>
+      {children}
+    </PortalLayout>
+  );
+}
 
 export function AdminDashboard() {
   const [stats, setStats] = useState(null);
@@ -16,7 +46,7 @@ export function AdminDashboard() {
   }, []);
 
   return (
-    <PortalLayout title="Admin portal" links={adminLinks}>
+    <AdminPortalLayout unassignedCount={stats?.pendingAssignments}>
       {!stats ? (
         <p className="muted">Loading…</p>
       ) : (
@@ -38,7 +68,7 @@ export function AdminDashboard() {
           ))}
         </div>
       )}
-    </PortalLayout>
+    </AdminPortalLayout>
   );
 }
 
@@ -160,7 +190,7 @@ export function AdminPapers() {
   }
 
   return (
-    <PortalLayout title="Admin portal" links={adminLinks}>
+    <AdminPortalLayout>
       <div className="split-admin">
         <form className="panel form" onSubmit={createPaper}>
           <h2>Upload question paper</h2>
@@ -384,7 +414,7 @@ export function AdminPapers() {
           </div>
         </div>
       )}
-    </PortalLayout>
+    </AdminPortalLayout>
   );
 }
 
@@ -394,9 +424,13 @@ export function AdminSubmissions() {
   const [selected, setSelected] = useState([]);
   const [reviewerId, setReviewerId] = useState('');
   const [message, setMessage] = useState('');
+  const [loaded, setLoaded] = useState(false);
 
   function reload() {
-    api('/api/admin/submissions').then((d) => setSubmissions(d.submissions));
+    api('/api/admin/submissions').then((d) => {
+      setSubmissions(d.submissions || []);
+      setLoaded(true);
+    });
   }
 
   useEffect(() => {
@@ -422,8 +456,12 @@ export function AdminSubmissions() {
     reload();
   }
 
+  const unassignedCount = loaded
+    ? submissions.filter((s) => s.status === 'submitted' || !s.assignedReviewerId).length
+    : undefined;
+
   return (
-    <PortalLayout title="Admin portal" links={adminLinks}>
+    <AdminPortalLayout unassignedCount={unassignedCount}>
       <div className="panel">
         <div className="panel-head">
           <h2>Submissions & assignment</h2>
@@ -476,7 +514,7 @@ export function AdminSubmissions() {
           </tbody>
         </table>
       </div>
-    </PortalLayout>
+    </AdminPortalLayout>
   );
 }
 
@@ -487,7 +525,6 @@ export function AdminUsers() {
     email: '',
     password: '',
     role: 'reviewer',
-    specialization: '',
   });
   const [message, setMessage] = useState('');
 
@@ -510,17 +547,17 @@ export function AdminUsers() {
         role: form.role,
         profile:
           form.role === 'reviewer'
-            ? { qualification: 'CA', specialization: form.specialization }
+            ? { qualification: 'CA' }
             : {},
       },
     });
     setMessage('User created.');
-    setForm({ name: '', email: '', password: '', role: 'reviewer', specialization: '' });
+    setForm({ name: '', email: '', password: '', role: 'reviewer' });
     reload();
   }
 
   return (
-    <PortalLayout title="Admin portal" links={adminLinks}>
+    <AdminPortalLayout>
       <div className="split-admin">
         <form className="panel form" onSubmit={createUser}>
           <h2>Add user</h2>
@@ -554,15 +591,6 @@ export function AdminUsers() {
               <option value="admin">Admin</option>
             </select>
           </label>
-          {form.role === 'reviewer' && (
-            <label>
-              Specialization
-              <input
-                value={form.specialization}
-                onChange={(e) => setForm({ ...form, specialization: e.target.value })}
-              />
-            </label>
-          )}
           {message && <p className="success">{message}</p>}
           <button className="btn primary">Create</button>
         </form>
@@ -590,6 +618,6 @@ export function AdminUsers() {
           </table>
         </div>
       </div>
-    </PortalLayout>
+    </AdminPortalLayout>
   );
 }

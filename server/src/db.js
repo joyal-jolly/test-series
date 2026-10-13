@@ -130,6 +130,12 @@ export const dbService = {
     return data || null;
   },
 
+  async deleteAttempt(id) {
+    const { error } = await supabase.from('attempts').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
   // SUBMISSIONS
   async getSubmissions() {
     const { data, error } = await supabase.from('submissions').select('*');
@@ -206,11 +212,6 @@ export const dbService = {
   },
 
   async submitEvaluation({ evaluation, questionEvaluations, submissionId, attemptId }) {
-    const now = new Date().toISOString();
-
-    // Pull annotatedPdfUrl out before inserting – it lives on submissions, not evaluations
-    const { annotatedPdfUrl, ...evalToInsert } = evaluation;
-
     // 1. Remove any prior incomplete or duplicate evaluation for this submission
     const { data: existingEvals } = await supabase
       .from('evaluations')
@@ -224,7 +225,7 @@ export const dbService = {
     }
 
     // 2. Insert parent evaluation FIRST so foreign key constraint is satisfied
-    const evRes = await supabase.from('evaluations').insert(evalToInsert);
+    const evRes = await supabase.from('evaluations').insert(evaluation);
     if (evRes.error) throw new Error(evRes.error.message);
 
     // 3. Insert child question evaluations AFTER parent exists in database
@@ -233,12 +234,10 @@ export const dbService = {
       if (qeRes.error) throw new Error(qeRes.error.message);
     }
 
-    // 4. Update submission (status + annotated PDF url) and attempt status
-    const submissionUpdate = { status: 'evaluated' };
-    if (annotatedPdfUrl) submissionUpdate.annotatedPdfUrl = annotatedPdfUrl;
-
+    // 4. Update submission status and attempt status
+    const now = new Date().toISOString();
     const [subRes, attRes] = await Promise.all([
-      supabase.from('submissions').update(submissionUpdate).eq('id', submissionId),
+      supabase.from('submissions').update({ status: 'evaluated' }).eq('id', submissionId),
       supabase.from('attempts').update({ status: 'evaluated', updatedAt: now }).eq('id', attemptId),
     ]);
     if (subRes.error) throw new Error(subRes.error.message);

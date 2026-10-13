@@ -23,6 +23,7 @@ import {
   ReviewerAssignments,
   ReviewerDashboard,
   ReviewSubmissionPage,
+  ReviewErrorBoundary,
 } from './pages/ReviewerPages';
 
 export default function App() {
@@ -48,11 +49,7 @@ export default function App() {
           />
           <Route
             path="/student/submissions"
-            element={
-              <ProtectedRoute roles={['student']}>
-                <StudentSubmissions />
-              </ProtectedRoute>
-            }
+            element={<Navigate to="/student" replace />}
           />
           <Route
             path="/student/attempts/:id"
@@ -124,7 +121,9 @@ export default function App() {
             path="/reviewer/assignments/:id"
             element={
               <ProtectedRoute roles={['reviewer']}>
-                <ReviewSubmissionPage />
+                <ReviewErrorBoundary>
+                  <ReviewSubmissionPage />
+                </ReviewErrorBoundary>
               </ProtectedRoute>
             }
           />

@@ -8,14 +8,18 @@ import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ANNOTATED_DIR = path.join(__dirname, '..', '..', 'uploads', 'annotated');
-fs.mkdirSync(ANNOTATED_DIR, { recursive: true });
+const ANSWERS_DIR = path.join(__dirname, '..', '..', 'uploads', 'answers');
+const DRAFTS_DIR = path.join(__dirname, '..', '..', 'uploads', 'drafts');
+if (!fs.existsSync(DRAFTS_DIR)) {
+  try { fs.mkdirSync(DRAFTS_DIR, { recursive: true }); } catch { /* ignore */ }
+}
 
-const annotatedStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, ANNOTATED_DIR),
-  filename: (_req, _file, cb) => cb(null, `${uuid()}.pdf`),
+// Temporary multer storage – we rename the file to overwrite the original answer
+const tmpStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, ANSWERS_DIR),
+  filename: (_req, _file, cb) => cb(null, `_tmp_${uuid()}.pdf`),
 });
-const uploadAnnotated = multer({ storage: annotatedStorage, limits: { fileSize: 50 * 1024 * 1024 } });
+const uploadAnnotated = multer({ storage: tmpStorage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth, requireRole('reviewer'));
@@ -118,8 +122,20 @@ router.get('/assignments/:id', async (req, res, next) => {
       ? await dbService.getQuestionEvaluations(evaluation.id)
       : [];
 
+    const assignment = enrichSubmission(submission, users, papers, evaluations);
+
+    // If draftAnnotations is not present on the submission record, load from local fallback if available
+    if (assignment.draftAnnotations === undefined || assignment.draftAnnotations === null) {
+      const draftPath = path.join(DRAFTS_DIR, `${submission.id}.json`);
+      if (fs.existsSync(draftPath)) {
+        try {
+          assignment.draftAnnotations = JSON.parse(fs.readFileSync(draftPath, 'utf8'));
+        } catch { /* ignore */ }
+      }
+    }
+
     res.json({
-      assignment: enrichSubmission(submission, users, papers, evaluations),
+      assignment,
       evaluation,
       questionEvaluations: questionEvals,
     });
@@ -128,10 +144,10 @@ router.get('/assignments/:id', async (req, res, next) => {
   }
 });
 
-// Save draft
+// Save draft (feedback text + annotation marks)
 router.patch('/assignments/:id/draft', async (req, res, next) => {
   try {
-    const { feedback } = req.body || {};
+    const { feedback, draftAnnotations } = req.body || {};
     const submission = await dbService.getSubmissionById(req.params.id);
     if (!submission || submission.assignedReviewerId !== req.user.id) {
       return res.status(404).json({ error: 'Assignment not found' });
@@ -141,10 +157,31 @@ router.patch('/assignments/:id/draft', async (req, res, next) => {
     }
 
     const now = new Date().toISOString();
-    await dbService.updateSubmission(submission.id, {
+    const update = {
       draftFeedback: feedback ?? '',
       draftSavedAt: now,
-    });
+    };
+    // Save annotation JSON if provided (can be null to clear)
+    if (draftAnnotations !== undefined) {
+      update.draftAnnotations = draftAnnotations;
+    }
+
+    try {
+      await dbService.updateSubmission(submission.id, update);
+    } catch (dbErr) {
+      // If Supabase schema does not have draftAnnotations column yet, fallback to saving draft annotations on disk
+      if (dbErr.message && dbErr.message.includes('draftAnnotations')) {
+        console.warn(`[draft] Supabase submissions table missing draftAnnotations column. Saving annotations to local fallback.`);
+        delete update.draftAnnotations;
+        // Save feedback + draftSavedAt to Supabase without the missing column
+        await dbService.updateSubmission(submission.id, update);
+        // Persist draft annotations on local disk as fallback
+        const draftPath = path.join(DRAFTS_DIR, `${submission.id}.json`);
+        fs.writeFileSync(draftPath, JSON.stringify(draftAnnotations || null), 'utf8');
+      } else {
+        throw dbErr;
+      }
+    }
 
     res.json({ ok: true, savedAt: now });
   } catch (err) {
@@ -152,7 +189,7 @@ router.patch('/assignments/:id/draft', async (req, res, next) => {
   }
 });
 
-// Upload annotated PDF (called before /evaluate)
+// Upload reviewed PDF – overwrites the original student answer file in-place
 router.post('/assignments/:id/upload-annotated', (req, res, next) => {
   uploadAnnotated.single('annotatedPdf')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -163,8 +200,35 @@ router.post('/assignments/:id/upload-annotated', (req, res, next) => {
         fs.unlink(req.file.path, () => {});
         return res.status(404).json({ error: 'Assignment not found' });
       }
-      const url = `/uploads/annotated/${req.file.filename}`;
-      res.json({ url });
+
+      // Derive the original answer file path from the stored URL
+      // answerFileUrl is like /uploads/answers/<filename>
+      const originalFilename = path.basename(submission.answerFileUrl || '');
+      if (!originalFilename) {
+        // No original file on record – just keep the uploaded file as-is
+        const url = `/uploads/answers/${req.file.filename}`;
+        return res.json({ url });
+      }
+
+      const originalPath = path.join(ANSWERS_DIR, originalFilename);
+
+      // Overwrite the original with the reviewed PDF
+      fs.rename(req.file.path, originalPath, (renameErr) => {
+        if (renameErr) {
+          // Fallback: copy then remove if cross-device rename fails
+          const rs = fs.createReadStream(req.file.path);
+          const ws = fs.createWriteStream(originalPath);
+          rs.pipe(ws);
+          ws.on('finish', () => {
+            fs.unlink(req.file.path, () => {});
+            res.json({ url: submission.answerFileUrl });
+          });
+          ws.on('error', (copyErr) => next(copyErr));
+        } else {
+          // Return the same original URL – the file has been overwritten
+          res.json({ url: submission.answerFileUrl });
+        }
+      });
     } catch (err2) {
       next(err2);
     }
@@ -188,7 +252,6 @@ router.post('/assignments/:id/evaluate', async (req, res, next) => {
       ? rawMarks
       : (paper?.questions || []).map((q) => ({ questionId: q.id, marksAwarded: 0, feedback: '' }));
 
-    const { annotatedPdfUrl } = req.body || {};
     const now = new Date().toISOString();
     const totalMarks = questionMarks.reduce((sum, qm) => sum + Number(qm.marksAwarded || 0), 0);
 
@@ -199,7 +262,6 @@ router.post('/assignments/:id/evaluate', async (req, res, next) => {
       reviewerId: req.user.id,
       totalMarks,
       feedback: feedback || '',
-      annotatedPdfUrl: annotatedPdfUrl || null,
       status: 'completed',
       evaluatedAt: now,
       updatedAt: now,

@@ -118,7 +118,12 @@ export function PortalLayout({ title, links, children }) {
         <nav>
           {links.map((l) => (
             <NavLink key={l.to} to={l.to} end={l.end}>
-              {l.label}
+              <span>{l.label}</span>
+              {l.badge !== undefined && l.badge !== null && l.badge > 0 ? (
+                <span className="nav-badge" title={`${l.badge} pending assignment`}>
+                  {l.badge}
+                </span>
+              ) : null}
             </NavLink>
           ))}
         </nav>

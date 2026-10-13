@@ -184,9 +184,34 @@ const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
   const wrapperRef = useRef(null);
   const pdfDocRef = useRef(null);
 
+  // ── Draw annotations for a specific page ──────────────────────────────────────
+  const drawAnnotsForPage = useCallback((pn) => {
+    const canvas = annotCanvasRefs.current[pn];
+    if (!canvas || !canvas.width) return;
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width;
+    const H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    (annotsRef.current[pn] || []).forEach((a) => drawAnnotation(ctx, a, W, H));
+  }, []);
+
   // ── Export annotated PDF ──────────────────────────────────────────────────────
   // Merges each PDF canvas + annotation canvas into a new PDF and returns a Blob.
   useImperativeHandle(ref, () => ({
+    // Returns the full annotation JSON so it can be saved as a draft
+    getAnnotations() {
+      return annotsRef.current;
+    },
+
+    // Loads a previously saved annotation JSON and redraws all pages
+    loadAnnotations(data) {
+      if (!data || typeof data !== 'object') return;
+      annotsRef.current = data;
+      setAnnots(data);
+      // Redraw all pages that have annotations
+      Object.keys(data).forEach((pn) => drawAnnotsForPage(Number(pn)));
+    },
+
     async exportAnnotatedPdf() {
       const doc = pdfDocRef.current;
       if (!doc) throw new Error('PDF not loaded');
@@ -220,7 +245,7 @@ const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
       const pdfBytes = await newPdf.save();
       return new Blob([pdfBytes], { type: 'application/pdf' });
     },
-  }));
+  }), [drawAnnotsForPage]);
 
   // Sync refs with state
   useEffect(() => { toolRef.current = tool; }, [tool]);
@@ -245,30 +270,30 @@ const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
     pdfCanvasRefs.current = {};
     annotCanvasRefs.current = {};
 
+    let isCancelled = false;
     const task = pdfjsLib.getDocument({ url: pdfUrl });
     task.promise
       .then((doc) => {
+        if (isCancelled) return;
         pdfDocRef.current = doc;
         setNumPages(doc.numPages);
+        setPdfError('');
         setPdfLoading(false);
       })
       .catch((err) => {
+        if (isCancelled) return;
+        // Ignore internal abort exceptions caused by React StrictMode or component unmount/remount
+        if (err?.name === 'AbortException' || err?.message?.toLowerCase().includes('abort')) {
+          return;
+        }
         setPdfError(`Could not load PDF: ${err?.message || 'Unknown error'}`);
         setPdfLoading(false);
       });
-    return () => { try { task.destroy(); } catch { /* ignore */ } };
+    return () => {
+      isCancelled = true;
+      try { task.destroy(); } catch { /* ignore */ }
+    };
   }, [pdfUrl]);
-
-  // ── Draw annotations for a specific page ──────────────────────────────────────
-  const drawAnnotsForPage = useCallback((pn) => {
-    const canvas = annotCanvasRefs.current[pn];
-    if (!canvas || !canvas.width) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.width;
-    const H = canvas.height;
-    ctx.clearRect(0, 0, W, H);
-    (annotsRef.current[pn] || []).forEach((a) => drawAnnotation(ctx, a, W, H));
-  }, []);
 
   // ── Render a single page to its canvases ──────────────────────────────────────
   const renderOnePage = useCallback(async (doc, pn, sc) => {
@@ -665,8 +690,8 @@ const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
           </div>
         )}
 
-        {/* Error */}
-        {!pdfLoading && pdfError && (
+        {/* Error — only show when no pages could be loaded */}
+        {!pdfLoading && pdfError && numPages === 0 && (
           <div className="pdfan-status pdfan-status--err">
             <span style={{ fontSize: '1.5rem' }}>⚠️</span>
             <p>{pdfError}</p>

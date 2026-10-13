@@ -70,7 +70,11 @@ router.get('/mine', requireAuth, requireRole('student'), async (req, res, next) 
     ]);
 
     const myAttempts = attempts
-      .filter((a) => a.studentId === req.user.id)
+      .filter(
+        (a) =>
+          a.studentId === req.user.id &&
+          ['submitted', 'assigned', 'under_review', 'evaluated'].includes(a.status)
+      )
       .map((a) => enrichAttempt(a, papers, submissions, evaluations))
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
@@ -89,18 +93,22 @@ router.get('/dashboard', requireAuth, requireRole('student'), async (req, res, n
       dbService.getEvaluations(),
     ]);
 
-    const myAttempts = attempts
-      .filter((a) => a.studentId === req.user.id)
+    const submittedAttempts = attempts
+      .filter(
+        (a) =>
+          a.studentId === req.user.id &&
+          ['submitted', 'assigned', 'under_review', 'evaluated'].includes(a.status)
+      )
       .map((a) => enrichAttempt(a, papers, submissions, evaluations))
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
     res.json({
-      recentAttempts: myAttempts.slice(0, 5),
-      pendingEvaluations: myAttempts.filter((a) =>
+      recentAttempts: submittedAttempts.slice(0, 5),
+      totalSubmissions: submittedAttempts.length,
+      pendingEvaluations: submittedAttempts.filter((a) =>
         ['submitted', 'assigned', 'under_review'].includes(a.status)
       ).length,
-      completedEvaluations: myAttempts.filter((a) => a.status === 'evaluated').length,
-      inProgress: myAttempts.filter((a) => a.status === 'in_progress').length,
+      completedEvaluations: submittedAttempts.filter((a) => a.status === 'evaluated').length,
     });
   } catch (err) {
     next(err);
@@ -117,21 +125,16 @@ router.post('/start', requireAuth, requireRole('student'), async (req, res, next
       return res.status(404).json({ error: 'Published question paper not found' });
     }
 
+    // Purge any previous incomplete/stale attempt for this paper by this student
     const allAttempts = await dbService.getAttempts();
-    const existing = allAttempts.find(
+    const staleIncomplete = allAttempts.filter(
       (a) =>
         a.studentId === req.user.id &&
         a.questionPaperId === questionPaperId &&
-        ['in_progress', 'not_started'].includes(a.status)
+        ['in_progress', 'not_started', 'abandoned'].includes(a.status)
     );
-
-    if (existing) {
-      const [papers, submissions, evaluations] = await Promise.all([
-        dbService.getQuestionPapers(),
-        dbService.getSubmissions(),
-        dbService.getEvaluations(),
-      ]);
-      return res.json({ attempt: enrichAttempt(existing, papers, submissions, evaluations) });
+    for (const stale of staleIncomplete) {
+      await dbService.deleteAttempt(stale.id).catch(() => {});
     }
 
     const now = new Date().toISOString();
@@ -157,6 +160,38 @@ router.post('/start', requireAuth, requireRole('student'), async (req, res, next
     ]);
 
     res.status(201).json({ attempt: enrichAttempt(attempt, papers, submissions, evaluations) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/discard', requireAuth, requireRole('student'), async (req, res, next) => {
+  try {
+    const attempt = await dbService.getAttemptById(req.params.id);
+    if (!attempt || attempt.studentId !== req.user.id) {
+      return res.status(404).json({ error: 'Attempt not found' });
+    }
+    if (['in_progress', 'not_started'].includes(attempt.status)) {
+      await dbService.deleteAttempt(attempt.id);
+      return res.json({ ok: true, discarded: true });
+    }
+    return res.status(400).json({ error: 'Cannot discard an already submitted attempt' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', requireAuth, requireRole('student'), async (req, res, next) => {
+  try {
+    const attempt = await dbService.getAttemptById(req.params.id);
+    if (!attempt || attempt.studentId !== req.user.id) {
+      return res.status(404).json({ error: 'Attempt not found' });
+    }
+    if (['in_progress', 'not_started'].includes(attempt.status)) {
+      await dbService.deleteAttempt(attempt.id);
+      return res.json({ ok: true, deleted: true });
+    }
+    return res.status(400).json({ error: 'Cannot delete an already submitted attempt' });
   } catch (err) {
     next(err);
   }

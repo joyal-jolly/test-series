@@ -1,8 +1,40 @@
-import { useEffect, useRef, useState } from 'react';
+import { Component, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PortalLayout } from '../components/Layouts';
 import PDFAnnotator from '../components/PDFAnnotator';
 import { api } from '../lib/api';
+
+// ─── Error Boundary ───────────────────────────────────────────────────────────
+export class ReviewErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="rev-shell">
+          <div className="rev-topbar">
+            <Link to="/reviewer/assignments" className="rev-back-btn">← Assignments</Link>
+            <span className="rev-topbar-title">Error loading review page</span>
+          </div>
+          <div style={{ padding: '2rem', color: '#f87171' }}>
+            <h2>⚠️ Something went wrong</h2>
+            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', marginTop: '1rem', background: '#1e293b', padding: '1rem', borderRadius: '0.5rem' }}>
+              {this.state.error?.message || String(this.state.error)}
+            </pre>
+            <button
+              className="btn primary"
+              style={{ marginTop: '1rem' }}
+              onClick={() => { this.setState({ error: null }); window.location.reload(); }}
+            >
+              Reload page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const reviewerLinks = [
   { to: '/reviewer', label: 'Dashboard', end: true },
@@ -131,8 +163,11 @@ export function ReviewSubmissionPage() {
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [exportStatus, setExportStatus] = useState(''); // '' | 'exporting' | 'uploading'
 
-  // Ref to the answer PDFAnnotator so we can call exportAnnotatedPdf()
+  // Ref to the answer PDFAnnotator so we can call exportAnnotatedPdf() / getAnnotations() / loadAnnotations()
   const answerAnnotatorRef = useRef(null);
+  // Pending annotations to load once the PDFAnnotator has finished rendering
+  const pendingAnnotsRef = useRef(null);
+  const annotationsLoadedRef = useRef(false);
 
   // Which PDF is visible in the left panel: 'answer' | 'paper'
   // IMPORTANT: Both PDFAnnotator instances stay MOUNTED at all times so that
@@ -153,26 +188,53 @@ export function ReviewSubmissionPage() {
         if (d.assignment?.draftSavedAt && !d.evaluation) {
           setLastSavedAt(new Date(d.assignment.draftSavedAt));
         }
+        // Store draft annotations to be loaded once the PDF annotator is ready
+        if (d.assignment?.draftAnnotations && !d.evaluation) {
+          pendingAnnotsRef.current = d.assignment.draftAnnotations;
+        }
       })
       .catch((e) => setError(e.message));
   }, [id]);
+
+  // Poll until the annotator ref is available, then load saved annotations once.
+  // Empty dep array [] – run once on mount only.
+  useEffect(() => {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      if (annotationsLoadedRef.current || attempts > 50) {
+        clearInterval(interval);
+        return;
+      }
+      if (!pendingAnnotsRef.current) return;
+      if (answerAnnotatorRef.current?.loadAnnotations) {
+        answerAnnotatorRef.current.loadAnnotations(pendingAnnotsRef.current);
+        annotationsLoadedRef.current = true;
+        pendingAnnotsRef.current = null;
+        clearInterval(interval);
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveDraft() {
     setDraftBusy(true);
     setDraftMsg(null);
     try {
+      // Capture current annotation state from the PDF annotator
+      const draftAnnotations = answerAnnotatorRef.current?.getAnnotations?.() ?? null;
       const result = await api(`/api/reviewer/assignments/${id}/draft`, {
         method: 'PATCH',
-        body: { feedback },
+        body: { feedback, draftAnnotations },
       });
       const saved = new Date(result.savedAt);
       setLastSavedAt(saved);
-      setDraftMsg({ ok: true, text: 'Draft saved!' });
+      setDraftMsg({ ok: true, text: '✅ Draft saved — annotations preserved!' });
     } catch (err) {
       setDraftMsg({ ok: false, text: err.message || 'Failed to save draft' });
     } finally {
       setDraftBusy(false);
-      setTimeout(() => setDraftMsg(null), 3000);
+      setTimeout(() => setDraftMsg(null), 4000);
     }
   }
 

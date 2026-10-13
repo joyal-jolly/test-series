@@ -103,7 +103,8 @@ CREATE TABLE IF NOT EXISTS public.submissions (
   "assignedReviewerId" TEXT REFERENCES public.users(id) ON DELETE SET NULL,
   "assignedAt" TIMESTAMPTZ,
   "draftFeedback" TEXT DEFAULT '',
-  "draftSavedAt" TIMESTAMPTZ
+  "draftSavedAt" TIMESTAMPTZ,
+  "draftAnnotations" JSONB DEFAULT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_submissions_attempt ON public.submissions("attemptId");

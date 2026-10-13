@@ -502,6 +502,46 @@ label {
   width: min(100%, 440px);
 }
 
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap input {
+  padding-right: 2.75rem;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 0.4rem;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 0.4rem;
+  transition: color 0.15s ease, background 0.15s ease;
+  line-height: 1;
+}
+
+.password-toggle-btn:hover {
+  color: var(--accent);
+  background: rgba(13, 56, 99, 0.08);
+}
+
+.password-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .auth-logo-center {
   display: flex;
   justify-content: center;
@@ -566,11 +606,32 @@ label {
   border: none;
   border-radius: 0.7rem;
   padding: 0.7rem 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .sidebar nav a.active {
   background: rgba(255, 255, 255, 0.1);
   color: white;
+}
+
+.sidebar nav .nav-badge {
+  background: #f97316;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  min-width: 1.25rem;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(249, 115, 22, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar-foot {
@@ -642,6 +703,31 @@ label {
 .pill.archived {
   background: #e5e7eb;
   color: #374151;
+}
+
+/* Student portal: View result link color transition */
+.result-link {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.result-link.result-link-new {
+  color: #16a34a !important; /* Green at first */
+}
+
+.result-link.result-link-new:hover {
+  color: #15803d !important;
+}
+
+.result-link.result-link-viewed {
+  color: #000000 !important; /* Black once clicked */
+}
+
+.result-link.result-link-viewed:hover {
+  color: #334155 !important;
 }
 
 .error {

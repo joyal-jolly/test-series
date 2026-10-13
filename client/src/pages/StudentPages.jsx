@@ -4,23 +4,21 @@ import { PortalLayout } from '../components/Layouts';
 import { api } from '../lib/api';
 
 // ─── Leave Exam Confirmation Modal ────────────────────────────────────────────
-function LeaveExamModal({ onConfirm, onCancel }) {
+function LeaveExamModal({ onConfirm, onCancel, busy }) {
   return (
     <div className="modal-overlay">
       <div className="modal-card leave-exam-modal">
         <div className="modal-badge leave-badge">⚠️ Leave Exam?</div>
-        <h2 className="modal-title">Are you sure you want to leave?</h2>
+        <h2 className="modal-title">Leave without submitting?</h2>
         <p className="modal-desc">
-          If you leave now, the exam timer will keep running. You can return
-          to continue, but you will <strong>not</strong> be able to view the
-          question paper again once you navigate away.
+          If you go back or leave now, this will <strong>not</strong> be counted as an attempt. You can start a fresh attempt anytime.
         </p>
         <div className="modal-actions">
-          <button className="btn ghost" onClick={onCancel}>
+          <button className="btn ghost" onClick={onCancel} disabled={busy}>
             Stay in Exam
           </button>
-          <button className="btn danger" onClick={onConfirm}>
-            Leave Exam
+          <button className="btn danger" onClick={onConfirm} disabled={busy}>
+            {busy ? 'Leaving…' : 'Leave Exam'}
           </button>
         </div>
       </div>
@@ -30,13 +28,55 @@ function LeaveExamModal({ onConfirm, onCancel }) {
 
 const studentLinks = [
   { to: '/student', label: 'Dashboard', end: true },
-  { to: '/student/submissions', label: 'My submissions' },
   { to: '/papers', label: 'Browse papers' },
 ];
 
 function statusLabel(status) {
   return String(status || '').replaceAll('_', ' ');
 }
+
+// ─── Viewed Results Persistence (Green at first, Black once clicked) ─────────
+const VIEWED_RESULTS_KEY = 'mentaura_viewed_results';
+
+function getViewedResults() {
+  try {
+    const raw = localStorage.getItem(VIEWED_RESULTS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function markResultViewed(id) {
+  try {
+    const current = getViewedResults();
+    if (!current.includes(id)) {
+      localStorage.setItem(VIEWED_RESULTS_KEY, JSON.stringify([...current, id]));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function ViewResultLink({ attemptId, label = 'View result' }) {
+  const [viewed, setViewed] = useState(() => getViewedResults().includes(attemptId));
+
+  function handleClick() {
+    markResultViewed(attemptId);
+    setViewed(true);
+  }
+
+  return (
+    <Link
+      to={`/student/attempts/${attemptId}/result`}
+      onClick={handleClick}
+      className={`result-link ${viewed ? 'result-link-viewed' : 'result-link-new'}`}
+    >
+      {label}
+    </Link>
+  );
+}
+
 
 // ─── Countdown Timer Component ────────────────────────────────────────────────
 function CountdownTimer({ deadline, onExpire }) {
@@ -95,8 +135,8 @@ export function StudentDashboard() {
         <>
           <div className="stats-grid">
             <div className="stat-tile">
-              <strong>{data.inProgress}</strong>
-              <span>In progress</span>
+              <strong>{data.totalSubmissions ?? (data.pendingEvaluations + data.completedEvaluations)}</strong>
+              <span>Total submitted</span>
             </div>
             <div className="stat-tile">
               <strong>{data.pendingEvaluations}</strong>
@@ -140,9 +180,7 @@ export function StudentDashboard() {
                     <td>{new Date(a.updatedAt).toLocaleString()}</td>
                     <td>
                       {a.status === 'evaluated' ? (
-                        <Link to={`/student/attempts/${a.id}/result`}>View result</Link>
-                      ) : a.status === 'in_progress' ? (
-                        <Link to={`/student/attempts/${a.id}`}>Continue</Link>
+                        <ViewResultLink attemptId={a.id} />
                       ) : (
                         <Link to={`/student/attempts/${a.id}`}>View</Link>
                       )}
@@ -193,11 +231,9 @@ export function StudentSubmissions() {
                 </td>
                 <td>
                   {a.status === 'evaluated' ? (
-                    <Link to={`/student/attempts/${a.id}/result`}>Result</Link>
-                  ) : a.status === 'in_progress' ? (
-                    <Link to={`/student/attempts/${a.id}`}>Submit</Link>
+                    <ViewResultLink attemptId={a.id} label="View result" />
                   ) : (
-                    '—'
+                    <Link to={`/student/attempts/${a.id}`}>View</Link>
                   )}
                 </td>
               </tr>
@@ -232,13 +268,26 @@ export function AttemptPage() {
   // Keep phaseRef in sync so the popstate handler has the latest value
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
+  async function handleDiscardAndLeave() {
+    setBusy(true);
+    try {
+      await api(`/api/student/${id}/discard`, { method: 'POST' });
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false);
+      setShowLeaveModal(false);
+      navigate('/student');
+    }
+  }
+
   // Intercept browser back button during exam
   useEffect(() => {
     // Push a dummy history entry so we can catch the back navigation
     window.history.pushState(null, '', window.location.href);
 
     function handlePopState() {
-      if (phaseRef.current === 'in_exam') {
+      if (['in_exam', 'pre_start', 'post_exam'].includes(phaseRef.current)) {
         // Re-push so the user stays on the page until they confirm
         window.history.pushState(null, '', window.location.href);
         setShowLeaveModal(true);
@@ -367,7 +416,7 @@ export function AttemptPage() {
           <p className="muted">Your answer sheet has been received successfully. You will be notified once it is evaluated.</p>
           <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
             <Link to="/student" className="btn primary">Go to dashboard</Link>
-            <Link to="/student/submissions" className="btn ghost">My submissions</Link>
+            <Link to="/papers" className="btn ghost">Browse papers</Link>
           </div>
         </div>
       </PortalLayout>
@@ -378,6 +427,13 @@ export function AttemptPage() {
   if (phase === 'pre_start') {
     return (
       <PortalLayout title="Student portal" links={studentLinks}>
+        {showLeaveModal && (
+          <LeaveExamModal
+            onConfirm={handleDiscardAndLeave}
+            onCancel={() => setShowLeaveModal(false)}
+            busy={busy}
+          />
+        )}
         <div className="exam-prestart-wrap">
           <div className="exam-prestart-card panel">
             <div className="exam-prestart-badge">📋 Exam</div>
@@ -421,9 +477,19 @@ export function AttemptPage() {
 
             {error && <p className="error">{error}</p>}
 
-            <button className="btn primary lg exam-start-btn" onClick={startExam}>
-              🚀 Start Exam
-            </button>
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
+              <button className="btn primary lg exam-start-btn" onClick={startExam}>
+                🚀 Start Exam
+              </button>
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={handleDiscardAndLeave}
+                disabled={busy}
+              >
+                Cancel &amp; Go Back
+              </button>
+            </div>
           </div>
         </div>
       </PortalLayout>
@@ -437,16 +503,22 @@ export function AttemptPage() {
         {/* Leave-Exam confirmation modal */}
         {showLeaveModal && (
           <LeaveExamModal
-            onConfirm={() => {
-              setShowLeaveModal(false);
-              navigate('/student');
-            }}
+            onConfirm={handleDiscardAndLeave}
             onCancel={() => setShowLeaveModal(false)}
+            busy={busy}
           />
         )}
 
         {/* Top bar */}
         <div className="exam-topbar">
+          <button
+            type="button"
+            className="btn ghost exam-back-btn"
+            onClick={() => setShowLeaveModal(true)}
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+          >
+            ← Exit
+          </button>
           <div className="exam-topbar-title">
             <span className="exam-topbar-badge">📋</span>
             <strong>{attempt?.paperTitle}</strong>
@@ -495,6 +567,13 @@ export function AttemptPage() {
   if (phase === 'post_exam') {
     return (
       <PortalLayout title="Student portal" links={studentLinks}>
+        {showLeaveModal && (
+          <LeaveExamModal
+            onConfirm={handleDiscardAndLeave}
+            onCancel={() => setShowLeaveModal(false)}
+            busy={busy}
+          />
+        )}
         <div className="exam-submit-wrap">
           <div className="panel exam-submit-card">
             <div className="exam-submit-header">
@@ -526,6 +605,14 @@ export function AttemptPage() {
                 <button className="btn primary lg" disabled={busy}>
                   {busy ? 'Submitting…' : '📤 Submit answers'}
                 </button>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={handleDiscardAndLeave}
+                  disabled={busy}
+                >
+                  Cancel &amp; Discard Attempt
+                </button>
               </div>
             </form>
           </div>
@@ -544,6 +631,7 @@ export function ResultPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    markResultViewed(id);
     api(`/api/student/${id}/result`)
       .then(setData)
       .catch((e) => setError(e.message));
@@ -579,7 +667,7 @@ export function ResultPage() {
         <p>
           <strong>Overall feedback:</strong> {evaluation.feedback || '—'}
         </p>
-        {submission?.annotatedPdfUrl && (
+        {submission?.answerFileUrl && (
           <div className="annotated-pdf-box">
             <span className="annotated-pdf-icon">📑</span>
             <div>
@@ -588,7 +676,7 @@ export function ResultPage() {
                 Click below to view result
               </p>
               <a
-                href={submission.annotatedPdfUrl}
+                href={`${submission.answerFileUrl}?v=${encodeURIComponent(evaluation.evaluatedAt || '')}`}
                 target="_blank"
                 rel="noreferrer"
                 className="btn primary annotated-pdf-btn"
