@@ -3,6 +3,31 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PortalLayout } from '../components/Layouts';
 import { api } from '../lib/api';
 
+// ─── Leave Exam Confirmation Modal ────────────────────────────────────────────
+function LeaveExamModal({ onConfirm, onCancel }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card leave-exam-modal">
+        <div className="modal-badge leave-badge">⚠️ Leave Exam?</div>
+        <h2 className="modal-title">Are you sure you want to leave?</h2>
+        <p className="modal-desc">
+          If you leave now, the exam timer will keep running. You can return
+          to continue, but you will <strong>not</strong> be able to view the
+          question paper again once you navigate away.
+        </p>
+        <div className="modal-actions">
+          <button className="btn ghost" onClick={onCancel}>
+            Stay in Exam
+          </button>
+          <button className="btn danger" onClick={onConfirm}>
+            Leave Exam
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const studentLinks = [
   { to: '/student', label: 'Dashboard', end: true },
   { to: '/student/submissions', label: 'My submissions' },
@@ -201,6 +226,28 @@ export function AttemptPage() {
   const [file, setFile] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const phaseRef = useRef(phase);
+
+  // Keep phaseRef in sync so the popstate handler has the latest value
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
+  // Intercept browser back button during exam
+  useEffect(() => {
+    // Push a dummy history entry so we can catch the back navigation
+    window.history.pushState(null, '', window.location.href);
+
+    function handlePopState() {
+      if (phaseRef.current === 'in_exam') {
+        // Re-push so the user stays on the page until they confirm
+        window.history.pushState(null, '', window.location.href);
+        setShowLeaveModal(true);
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Fetch attempt on mount
   useEffect(() => {
@@ -387,6 +434,17 @@ export function AttemptPage() {
   if (phase === 'in_exam') {
     return (
       <div className="exam-fullscreen">
+        {/* Leave-Exam confirmation modal */}
+        {showLeaveModal && (
+          <LeaveExamModal
+            onConfirm={() => {
+              setShowLeaveModal(false);
+              navigate('/student');
+            }}
+            onCancel={() => setShowLeaveModal(false)}
+          />
+        )}
+
         {/* Top bar */}
         <div className="exam-topbar">
           <div className="exam-topbar-title">

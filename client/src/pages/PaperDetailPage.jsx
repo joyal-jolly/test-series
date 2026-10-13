@@ -11,6 +11,7 @@ export default function PaperDetailPage() {
   const [paper, setPaper] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     api(`/api/papers/${id}`)
@@ -18,7 +19,7 @@ export default function PaperDetailPage() {
       .catch((e) => setError(e.message));
   }, [id]);
 
-  async function attempt() {
+  function handleAttemptClick() {
     if (!user) {
       navigate(`/login?next=/papers/${id}`);
       return;
@@ -27,8 +28,13 @@ export default function PaperDetailPage() {
       setError('Only students can attempt papers.');
       return;
     }
+    setShowConfirm(true);
+  }
+
+  async function confirmAttempt() {
     setBusy(true);
     setError('');
+    setShowConfirm(false);
     try {
       const data = await api('/api/student/start', {
         method: 'POST',
@@ -65,48 +71,96 @@ export default function PaperDetailPage() {
   return (
     <PublicLayout>
       <section className="page-band">
-        <div className="detail-layout">
-          <div>
-            <div className="meta">
-              <span>{paper.caLevel}</span>
-              <span>{paper.paperType}</span>
-              <span>{paper.subjectName}</span>
-            </div>
-            <h1>{paper.title}</h1>
-            <p className="lede">{paper.description}</p>
-            <div className="stat-row">
-              <div>
-                <strong>{paper.totalMarks}</strong>
-                <span>Total marks</span>
+
+        {/* ── Confirmation Modal ─────────────────────────────────────────── */}
+        {showConfirm && (
+          <div className="modal-overlay" onClick={() => setShowConfirm(false)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-badge">📋 Confirm Attempt</div>
+              <h2 className="modal-title">{paper.title}</h2>
+
+              <div className="modal-paper-meta">
+                <div className="modal-meta-item">
+                  <span className="modal-meta-icon">🎓</span>
+                  <div>
+                    <strong>{paper.caLevel}</strong>
+                    <span>{paper.paperType}</span>
+                  </div>
+                </div>
+                <div className="modal-meta-item">
+                  <span className="modal-meta-icon">📚</span>
+                  <div>
+                    <strong>{paper.subjectName}</strong>
+                    <span>Subject</span>
+                  </div>
+                </div>
+                <div className="modal-meta-item">
+                  <span className="modal-meta-icon">⏱️</span>
+                  <div>
+                    <strong>{paper.durationMinutes} minutes</strong>
+                    <span>Duration</span>
+                  </div>
+                </div>
+                <div className="modal-meta-item">
+                  <span className="modal-meta-icon">📝</span>
+                  <div>
+                    <strong>{paper.totalMarks} marks</strong>
+                    <span>Total marks</span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <strong>{paper.durationMinutes}</strong>
-                <span>Minutes</span>
+
+              <div className="modal-instructions">
+                <h4>⚠️ Before you begin</h4>
+                <ul>
+                  <li>The timer starts immediately once you click <strong>Start Exam</strong>.</li>
+                  <li>The question paper will be shown on screen — <strong>downloading is not allowed</strong>.</li>
+                  <li>Write your answers on paper and upload a scan/photo at the end.</li>
+                  <li>Once started, you cannot pause the exam.</li>
+                </ul>
               </div>
-              <div>
-                <strong>{paper.questions?.length || 0}</strong>
-                <span>Questions</span>
+
+              {error && <p className="error">{error}</p>}
+
+              <div className="modal-actions">
+                <button className="btn ghost" onClick={() => setShowConfirm(false)} disabled={busy}>
+                  Cancel
+                </button>
+                <button className="btn primary lg" onClick={confirmAttempt} disabled={busy}>
+                  {busy ? 'Starting…' : '🚀 Start Exam'}
+                </button>
               </div>
-            </div>
-            {error && <p className="error">{error}</p>}
-            <div className="cta-row">
-              <button className="btn primary lg" onClick={attempt} disabled={busy}>
-                {busy ? 'Starting…' : 'Attempt this paper'}
-              </button>
             </div>
           </div>
-          <aside className="panel">
-            <h3>Questions overview</h3>
-            <ul className="q-list">
-              {(paper.questions || []).map((q) => (
-                <li key={q.id}>
-                  <span>Q{q.number}</span>
-                  <p>{q.prompt}</p>
-                  <em>{q.maxMarks} marks</em>
-                </li>
-              ))}
-            </ul>
-          </aside>
+        )}
+
+        {/* ── Paper Detail ───────────────────────────────────────────────── */}
+        <div className="detail-layout-single">
+          <div className="meta">
+            <span>{paper.caLevel}</span>
+            <span>{paper.paperType}</span>
+            <span>{paper.subjectName}</span>
+          </div>
+          <h1>{paper.title}</h1>
+          <p className="lede">{paper.description}</p>
+          <div className="stat-row">
+            <div>
+              <strong>{paper.totalMarks}</strong>
+              <span>Total marks</span>
+            </div>
+            <div>
+              <strong>{paper.durationMinutes}</strong>
+              <span>Minutes</span>
+            </div>
+          </div>
+          {error && <p className="error">{error}</p>}
+          <div className="cta-row">
+            <button className="btn primary lg" onClick={handleAttemptClick} disabled={busy}>
+              {busy ? 'Starting…' : 'Attempt this paper'}
+            </button>
+          </div>
+
+
         </div>
       </section>
     </PublicLayout>
