@@ -44,6 +44,26 @@ router.get('/dashboard', async (_req, res, next) => {
     ]);
 
     const today = new Date().toISOString().slice(0, 10);
+
+    // Submissions assigned to a reviewer but not yet evaluated
+    const assignedPending = submissions
+      .filter((s) => ['assigned', 'under_review'].includes(s.status) && s.assignedReviewerId)
+      .map((s) => {
+        const student = users.find((u) => u.id === s.studentId);
+        const paper = papers.find((p) => p.id === s.questionPaperId);
+        const reviewer = users.find((u) => u.id === s.assignedReviewerId);
+        return {
+          id: s.id,
+          studentName: student?.name || 'Unknown',
+          studentEmail: student?.email || '',
+          paperTitle: paper?.title || 'Unknown paper',
+          reviewerName: reviewer?.name || 'Unknown',
+          assignedAt: s.assignedAt,
+          status: s.status,
+        };
+      })
+      .sort((a, b) => new Date(b.assignedAt || 0) - new Date(a.assignedAt || 0));
+
     res.json({
       students: users.filter((u) => u.role === 'student').length,
       reviewers: users.filter((u) => u.role === 'reviewer').length,
@@ -56,6 +76,7 @@ router.get('/dashboard', async (_req, res, next) => {
       completedReviews: evaluations.filter((e) => e.status === 'completed').length,
       todaysSubmissions: submissions.filter((s) => s.submittedAt?.startsWith(today)).length,
       pendingAssignments: submissions.filter((s) => s.status === 'submitted').length,
+      assignedPending,
     });
   } catch (err) {
     next(err);
@@ -137,6 +158,31 @@ router.patch('/users/:id/status', async (req, res, next) => {
     const updated = await dbService.updateUserStatus(req.params.id, status);
     if (!updated) return res.status(404).json({ error: 'User not found' });
     res.json({ user: { id: updated.id, status: updated.status } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/users/:id', async (req, res, next) => {
+  try {
+    const user = await dbService.getUserById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Prevent deleting the requesting admin's own account
+    if (req.user && req.user.id === req.params.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account' });
+    }
+
+    // Prevent deleting the last admin
+    if (user.role === 'admin') {
+      const admins = await dbService.getUsers('admin');
+      if (admins.length <= 1) {
+        return res.status(400).json({ error: 'Cannot delete the last admin account' });
+      }
+    }
+
+    await dbService.deleteUser(req.params.id);
+    res.json({ ok: true, message: 'User deleted successfully' });
   } catch (err) {
     next(err);
   }

@@ -50,23 +50,61 @@ export function AdminDashboard() {
       {!stats ? (
         <p className="muted">Loading…</p>
       ) : (
-        <div className="stats-grid">
-          {[
-            ['Students', stats.students],
-            ['Reviewers', stats.reviewers],
-            ['Question papers', stats.questionPapers],
-            ['Total submissions', stats.totalSubmissions],
-            ['Pending reviews', stats.pendingReviews],
-            ['Completed reviews', stats.completedReviews],
-            ["Today's submissions", stats.todaysSubmissions],
-            ['Pending assignments', stats.pendingAssignments],
-          ].map(([label, value]) => (
-            <div className="stat-tile" key={label}>
-              <strong>{value}</strong>
-              <span>{label}</span>
+        <>
+          <div className="stats-grid">
+            {[
+              ['Students', stats.students],
+              ['Reviewers', stats.reviewers],
+              ['Question papers', stats.questionPapers],
+              ['Total submissions', stats.totalSubmissions],
+              ['Pending reviews', stats.pendingReviews],
+              ['Completed reviews', stats.completedReviews],
+              ["Today's submissions", stats.todaysSubmissions],
+              ['Pending assignments', stats.pendingAssignments],
+            ].map(([label, value]) => (
+              <div className="stat-tile" key={label}>
+                <strong>{value}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Assigned but not yet evaluated */}
+          {stats.assignedPending && stats.assignedPending.length > 0 && (
+            <div className="panel" style={{ marginTop: '1.5rem' }}>
+              <div className="panel-head">
+                <h2>Assigned &ndash; Pending evaluation</h2>
+                <span className="pill assigned" style={{ fontSize: '0.8rem' }}>
+                  {stats.assignedPending.length} pending
+                </span>
+              </div>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Paper</th>
+                    <th>Reviewer</th>
+                    <th>Assigned</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.assignedPending.map((s) => (
+                    <tr key={s.id}>
+                      <td>{s.studentName}</td>
+                      <td>{s.paperTitle}</td>
+                      <td>{s.reviewerName}</td>
+                      <td>{s.assignedAt ? new Date(s.assignedAt).toLocaleString() : '\u2014'}</td>
+                      <td>
+                        <span className={`pill ${s.status}`}>{s.status.replace('_', ' ')}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </AdminPortalLayout>
   );
@@ -276,7 +314,7 @@ export function AdminPapers() {
                     {p.pdfUrl && (
                       <div style={{ marginTop: '0.25rem' }}>
                         <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="muted" style={{ fontSize: '0.85rem', textDecoration: 'underline' }}>
-                          📄 View PDF
+                          View PDF
                         </a>
                       </div>
                     )}
@@ -386,7 +424,7 @@ export function AdminPapers() {
                 {editingPaper.pdfUrl ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
                     <a href={editingPaper.pdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
-                      📄 View current file ({editingPaper.pdfUrl.split('/').pop()})
+                      View current file ({editingPaper.pdfUrl.split('/').pop()})
                     </a>
                   </div>
                 ) : (
@@ -419,7 +457,7 @@ export function AdminPapers() {
 }
 
 export function AdminSubmissions() {
-  const [submissions, setSubmissions] = useState([]);
+  const [allSubmissions, setAllSubmissions] = useState([]);
   const [reviewers, setReviewers] = useState([]);
   const [selected, setSelected] = useState([]);
   const [reviewerId, setReviewerId] = useState('');
@@ -428,7 +466,7 @@ export function AdminSubmissions() {
 
   function reload() {
     api('/api/admin/submissions').then((d) => {
-      setSubmissions(d.submissions || []);
+      setAllSubmissions(d.submissions || []);
       setLoaded(true);
     });
   }
@@ -456,15 +494,18 @@ export function AdminSubmissions() {
     reload();
   }
 
-  const unassignedCount = loaded
-    ? submissions.filter((s) => s.status === 'submitted' || !s.assignedReviewerId).length
-    : undefined;
+  // Only show submissions that need to be assigned (not yet assigned to a reviewer)
+  const submissions = allSubmissions.filter(
+    (s) => s.status === 'submitted' && !s.assignedReviewerId
+  );
+
+  const unassignedCount = loaded ? submissions.length : undefined;
 
   return (
     <AdminPortalLayout unassignedCount={unassignedCount}>
       <div className="panel">
         <div className="panel-head">
-          <h2>Submissions & assignment</h2>
+          <h2>Unassigned submissions</h2>
           <div className="assign-bar">
             <select value={reviewerId} onChange={(e) => setReviewerId(e.target.value)}>
               {reviewers.map((r) => (
@@ -486,31 +527,30 @@ export function AdminSubmissions() {
               <th>Student</th>
               <th>Paper</th>
               <th>Submitted</th>
-              <th>Status</th>
-              <th>Reviewer</th>
             </tr>
           </thead>
           <tbody>
             {submissions.map((s) => (
               <tr key={s.id}>
                 <td>
-                  {['submitted', 'assigned'].includes(s.status) && (
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(s.id)}
-                      onChange={() => toggle(s.id)}
-                    />
-                  )}
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(s.id)}
+                    onChange={() => toggle(s.id)}
+                  />
                 </td>
                 <td>{s.studentName}</td>
                 <td>{s.paperTitle}</td>
                 <td>{new Date(s.submittedAt).toLocaleString()}</td>
-                <td>
-                  <span className={`pill ${s.status}`}>{s.status}</span>
-                </td>
-                <td>{s.reviewerName || '—'}</td>
               </tr>
             ))}
+            {submissions.length === 0 && loaded && (
+              <tr>
+                <td colSpan={4} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                  No unassigned submissions. All submissions have been assigned to reviewers.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -527,6 +567,7 @@ export function AdminUsers() {
     role: 'reviewer',
   });
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
   function reload() {
     api('/api/admin/users').then((d) => setUsers(d.users));
@@ -538,22 +579,43 @@ export function AdminUsers() {
 
   async function createUser(e) {
     e.preventDefault();
-    await api('/api/admin/users', {
-      method: 'POST',
-      body: {
-        name: form.name,
-        email: form.email,
-        password: form.password,
-        role: form.role,
-        profile:
-          form.role === 'reviewer'
-            ? { qualification: 'CA' }
-            : {},
-      },
-    });
-    setMessage('User created.');
-    setForm({ name: '', email: '', password: '', role: 'reviewer' });
-    reload();
+    setError('');
+    setMessage('');
+    try {
+      await api('/api/admin/users', {
+        method: 'POST',
+        body: {
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          role: form.role,
+          profile:
+            form.role === 'reviewer'
+              ? { qualification: 'CA' }
+              : {},
+        },
+      });
+      setMessage('User created.');
+      setForm({ name: '', email: '', password: '', role: 'reviewer' });
+      reload();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function deleteUser(u) {
+    if (!window.confirm(`Are you sure you want to delete ${u.name} (${u.email})? This action cannot be undone.`)) {
+      return;
+    }
+    setError('');
+    setMessage('');
+    try {
+      await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+      setMessage(`User "${u.name}" deleted.`);
+      reload();
+    } catch (err) {
+      setError(err.message);
+    }
   }
 
   return (
@@ -591,6 +653,7 @@ export function AdminUsers() {
               <option value="admin">Admin</option>
             </select>
           </label>
+          {error && <p className="error">{error}</p>}
           {message && <p className="success">{message}</p>}
           <button className="btn primary">Create</button>
         </form>
@@ -603,6 +666,7 @@ export function AdminUsers() {
                 <th>Email</th>
                 <th>Role</th>
                 <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -612,6 +676,17 @@ export function AdminUsers() {
                   <td>{u.email}</td>
                   <td>{u.role}</td>
                   <td>{u.status}</td>
+                  <td>
+                    <div className="table-actions">
+                      <button
+                        type="button"
+                        className="btn subtle danger"
+                        onClick={() => deleteUser(u)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

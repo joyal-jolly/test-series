@@ -48,7 +48,7 @@ export default function HomePage() {
               <li>Detailed question-wise marks &amp; feedback</li>
             </ol>
             <div className="hero-card-footer">
-              <small>📍 Vazhakulam, Ernakulam · 📞 +91 6282955052</small>
+              <small>Vazhakulam, Ernakulam · +91 6282955052</small>
             </div>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function HomePage() {
         </div>
         <div className="feature-grid">
           <article>
-            <div className="feature-icon">🏛️</div>
+            <div className="feature-icon"></div>
             <h3>Residential Campus</h3>
             <p>
               Peaceful, distraction-free environment in Vazhakulam, Ernakulam featuring premium hostels with
@@ -121,7 +121,7 @@ export default function HomePage() {
             </p>
           </article>
           <article>
-            <div className="feature-icon">📚</div>
+            <div className="feature-icon"></div>
             <h3>Dedicated Study Cubicles</h3>
             <p>
               Personal study cubicles, silent 24/7 study zones, and high-speed digital connectivity to support
@@ -129,7 +129,7 @@ export default function HomePage() {
             </p>
           </article>
           <article>
-            <div className="feature-icon">👨‍🏫</div>
+            <div className="feature-icon"></div>
             <h3>Personalized Mentorship</h3>
             <p>
               Continuous one-on-one sessions for doubt clearing, performance tracking, and psychological counseling

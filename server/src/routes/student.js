@@ -23,10 +23,9 @@ const upload = multer({
   storage,
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.pdf', '.png', '.jpg', '.jpeg', '.webp'];
     const ext = path.extname(file.originalname).toLowerCase();
-    if (!allowed.includes(ext)) {
-      return cb(new Error('Only PDF and image files are allowed'));
+    if (ext !== '.pdf') {
+      return cb(new Error('Only PDF files are allowed for answer submission'));
     }
     cb(null, true);
   },
@@ -219,7 +218,7 @@ router.get('/:id', requireAuth, requireRole('student'), async (req, res, next) =
 router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next) => {
   upload.single('answerFile')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
-    if (!req.file) return res.status(400).json({ error: 'Answer PDF/image is required' });
+    if (!req.file) return res.status(400).json({ error: 'Answer PDF is required' });
 
     try {
       const attempt = await dbService.getAttemptById(req.params.id);

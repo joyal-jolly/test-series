@@ -8,7 +8,7 @@ function LeaveExamModal({ onConfirm, onCancel, busy }) {
   return (
     <div className="modal-overlay">
       <div className="modal-card leave-exam-modal">
-        <div className="modal-badge leave-badge">⚠️ Leave Exam?</div>
+        <div className="modal-badge leave-badge">Leave Exam?</div>
         <h2 className="modal-title">Leave without submitting?</h2>
         <p className="modal-desc">
           If you go back or leave now, this will <strong>not</strong> be counted as an attempt. You can start a fresh attempt anytime.
@@ -353,7 +353,7 @@ export function AttemptPage() {
   async function submit(e) {
     e.preventDefault();
     if (!file) {
-      setError('Please upload your handwritten answer PDF or image.');
+      setError('Please upload your handwritten answer as a PDF file.');
       return;
     }
     setBusy(true);
@@ -411,7 +411,7 @@ export function AttemptPage() {
     return (
       <PortalLayout title="Student portal" links={studentLinks}>
         <div className="panel exam-submitted-panel">
-          <div className="exam-submitted-icon">✅</div>
+          <div className="exam-submitted-icon"></div>
           <h2>Answers submitted!</h2>
           <p className="muted">Your answer sheet has been received successfully. You will be notified once it is evaluated.</p>
           <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.75rem' }}>
@@ -436,26 +436,26 @@ export function AttemptPage() {
         )}
         <div className="exam-prestart-wrap">
           <div className="exam-prestart-card panel">
-            <div className="exam-prestart-badge">📋 Exam</div>
+            <div className="exam-prestart-badge">Exam</div>
             <h1 className="exam-prestart-title">{attempt?.paperTitle}</h1>
 
             <div className="exam-prestart-meta">
               <div className="exam-meta-item">
-                <span className="exam-meta-icon">⏱️</span>
+                <span className="exam-meta-icon"></span>
                 <div>
                   <strong>{attempt?.durationMinutes} minutes</strong>
                   <span>Duration</span>
                 </div>
               </div>
               <div className="exam-meta-item">
-                <span className="exam-meta-icon">📝</span>
+                <span className="exam-meta-icon"></span>
                 <div>
                   <strong>{attempt?.totalMarks} marks</strong>
                   <span>Total marks</span>
                 </div>
               </div>
               <div className="exam-meta-item">
-                <span className="exam-meta-icon">🎓</span>
+                <span className="exam-meta-icon"></span>
                 <div>
                   <strong>{attempt?.caLevel}</strong>
                   <span>{attempt?.paperType}</span>
@@ -464,7 +464,7 @@ export function AttemptPage() {
             </div>
 
             <div className="exam-instructions">
-              <h3>📌 Instructions</h3>
+              <h3>Instructions</h3>
               <ul>
                 <li>The timer will start as soon as you click <strong>Start Exam</strong>.</li>
                 <li>The question paper will be displayed on screen. <strong>Downloading is not allowed.</strong></li>
@@ -479,7 +479,7 @@ export function AttemptPage() {
 
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem', flexWrap: 'wrap' }}>
               <button className="btn primary lg exam-start-btn" onClick={startExam}>
-                🚀 Start Exam
+                Start Exam
               </button>
               <button
                 type="button"
@@ -520,7 +520,7 @@ export function AttemptPage() {
             ← Exit
           </button>
           <div className="exam-topbar-title">
-            <span className="exam-topbar-badge">📋</span>
+            <span className="exam-topbar-badge"></span>
             <strong>{attempt?.paperTitle}</strong>
           </div>
 
@@ -535,7 +535,7 @@ export function AttemptPage() {
             className="btn danger end-exam-btn"
             onClick={endExam}
           >
-            ✋ End Exam
+            End Exam
           </button>
         </div>
 
@@ -550,11 +550,11 @@ export function AttemptPage() {
             />
           ) : (
             <div className="exam-no-pdf">
-              <div className="exam-no-pdf-icon">📄</div>
+              <div className="exam-no-pdf-icon"></div>
               <h3>No PDF available for this paper.</h3>
               <p className="muted">Please check with your instructor. Use your time to write answers.</p>
               <button className="btn danger" onClick={endExam} style={{ marginTop: '1rem' }}>
-                ✋ End Exam &amp; Submit Answers
+                End Exam &amp; Submit Answers
               </button>
             </div>
           )}
@@ -582,28 +582,28 @@ export function AttemptPage() {
                 <p className="muted">{attempt?.paperTitle}</p>
               </div>
               <div className="exam-time-over-badge">
-                ⏰ Exam ended
+                Exam ended
               </div>
             </div>
 
             <div className="exam-submit-instructions">
-              <p>📷 Take a clear scan or photo of your handwritten answer sheet and upload it below.</p>
-              <p>Accepted formats: <strong>PDF, JPG, PNG, WEBP</strong> (max 15 MB)</p>
+              <p>Take a clear scan or photo of your handwritten answer sheet, save it as a PDF, and upload it below.</p>
+              <p>Accepted format: <strong>PDF only</strong> (max 15 MB)</p>
             </div>
 
             <form className="form" onSubmit={submit}>
               <label>
-                Upload handwritten answer (PDF / image)
+                Upload handwritten answer (PDF only)
                 <input
                   type="file"
-                  accept=".pdf,image/*"
+                  accept=".pdf"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                 />
               </label>
               {error && <p className="error">{error}</p>}
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
                 <button className="btn primary lg" disabled={busy}>
-                  {busy ? 'Submitting…' : '📤 Submit answers'}
+                  {busy ? 'Submitting…' : 'Submit answers'}
                 </button>
                 <button
                   type="button"
@@ -669,7 +669,7 @@ export function ResultPage() {
         </p>
         {submission?.answerFileUrl && (
           <div className="annotated-pdf-box">
-            <span className="annotated-pdf-icon">📑</span>
+            <span className="annotated-pdf-icon"></span>
             <div>
               <strong>Reviewed answer sheet</strong>
               <p className="muted" style={{ margin: '0.15rem 0 0.5rem' }}>

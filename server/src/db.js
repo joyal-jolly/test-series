@@ -45,6 +45,12 @@ export const dbService = {
     return data || null;
   },
 
+  async deleteUser(id) {
+    const { error } = await supabase.from('users').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
   // SUBJECTS
   async getSubjects() {
     const { data, error } = await supabase.from('subjects').select('*');

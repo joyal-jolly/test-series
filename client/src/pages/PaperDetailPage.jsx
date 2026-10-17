@@ -76,33 +76,33 @@ export default function PaperDetailPage() {
         {showConfirm && (
           <div className="modal-overlay" onClick={() => setShowConfirm(false)}>
             <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-badge">📋 Confirm Attempt</div>
+              <div className="modal-badge">Confirm Attempt</div>
               <h2 className="modal-title">{paper.title}</h2>
 
               <div className="modal-paper-meta">
                 <div className="modal-meta-item">
-                  <span className="modal-meta-icon">🎓</span>
+                  <span className="modal-meta-icon"></span>
                   <div>
                     <strong>{paper.caLevel}</strong>
                     <span>{paper.paperType}</span>
                   </div>
                 </div>
                 <div className="modal-meta-item">
-                  <span className="modal-meta-icon">📚</span>
+                  <span className="modal-meta-icon"></span>
                   <div>
                     <strong>{paper.subjectName}</strong>
                     <span>Subject</span>
                   </div>
                 </div>
                 <div className="modal-meta-item">
-                  <span className="modal-meta-icon">⏱️</span>
+                  <span className="modal-meta-icon"></span>
                   <div>
                     <strong>{paper.durationMinutes} minutes</strong>
                     <span>Duration</span>
                   </div>
                 </div>
                 <div className="modal-meta-item">
-                  <span className="modal-meta-icon">📝</span>
+                  <span className="modal-meta-icon"></span>
                   <div>
                     <strong>{paper.totalMarks} marks</strong>
                     <span>Total marks</span>
@@ -111,7 +111,7 @@ export default function PaperDetailPage() {
               </div>
 
               <div className="modal-instructions">
-                <h4>⚠️ Before you begin</h4>
+                <h4>Before you begin</h4>
                 <ul>
                   <li>The timer starts immediately once you click <strong>Start Exam</strong>.</li>
                   <li>The question paper will be shown on screen — <strong>downloading is not allowed</strong>.</li>
@@ -127,7 +127,7 @@ export default function PaperDetailPage() {
                   Cancel
                 </button>
                 <button className="btn primary lg" onClick={confirmAttempt} disabled={busy}>
-                  {busy ? 'Starting…' : '🚀 Start Exam'}
+                  {busy ? 'Starting…' : 'Start Exam'}
                 </button>
               </div>
             </div>

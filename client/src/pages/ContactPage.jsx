@@ -34,7 +34,7 @@ export default function ContactPage() {
 
             <div className="contact-info-cards">
               <div className="contact-card">
-                <span className="contact-icon">📍</span>
+                <span className="contact-icon"></span>
                 <div>
                   <strong>Campus Location</strong>
                   <p>Kadalikadu P.O., Manjalloor, Vazhakulam, Ernakulam, Kerala</p>
@@ -42,7 +42,7 @@ export default function ContactPage() {
               </div>
 
               <div className="contact-card">
-                <span className="contact-icon">📞</span>
+                <span className="contact-icon"></span>
                 <div>
                   <strong>Phone / WhatsApp</strong>
                   <p>
@@ -52,7 +52,7 @@ export default function ContactPage() {
               </div>
 
               <div className="contact-card">
-                <span className="contact-icon">✉️</span>
+                <span className="contact-icon"></span>
                 <div>
                   <strong>Email</strong>
                   <p>
@@ -62,7 +62,7 @@ export default function ContactPage() {
               </div>
 
               <div className="contact-card">
-                <span className="contact-icon">🌐</span>
+                <span className="contact-icon"></span>
                 <div>
                   <strong>Major Website</strong>
                   <p>

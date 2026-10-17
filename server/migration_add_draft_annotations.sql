@@ -1,3 +1,4 @@
+
 -- =============================================================================
 -- Migration: Add draftAnnotations column to submissions table
 -- Run this query in your Supabase Dashboard: SQL Editor -> New Query -> Run

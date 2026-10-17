@@ -17,7 +17,7 @@ export class ReviewErrorBoundary extends Component {
             <span className="rev-topbar-title">Error loading review page</span>
           </div>
           <div style={{ padding: '2rem', color: '#f87171' }}>
-            <h2>⚠️ Something went wrong</h2>
+            <h2>Something went wrong</h2>
             <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.85rem', marginTop: '1rem', background: '#1e293b', padding: '1rem', borderRadius: '0.5rem' }}>
               {this.state.error?.message || String(this.state.error)}
             </pre>
@@ -229,7 +229,7 @@ export function ReviewSubmissionPage() {
       });
       const saved = new Date(result.savedAt);
       setLastSavedAt(saved);
-      setDraftMsg({ ok: true, text: '✅ Draft saved — annotations preserved!' });
+      setDraftMsg({ ok: true, text: 'Draft saved — annotations preserved!' });
     } catch (err) {
       setDraftMsg({ ok: false, text: err.message || 'Failed to save draft' });
     } finally {
@@ -348,14 +348,14 @@ export function ReviewSubmissionPage() {
             className={`rev-toggle-btn${viewMode === 'answer' ? ' active' : ''}`}
             onClick={() => setViewMode('answer')}
           >
-            📝 Student Answer
+            Student Answer
           </button>
           {paperPdfUrl && (
             <button
               className={`rev-toggle-btn${viewMode === 'paper' ? ' active' : ''}`}
               onClick={() => setViewMode('paper')}
             >
-              📋 Question Paper
+              Question Paper
             </button>
           )}
         </div>
@@ -387,7 +387,7 @@ export function ReviewSubmissionPage() {
               <PDFAnnotator ref={answerAnnotatorRef} pdfUrl={answerUrl} />
             ) : (
               <div className="rev-no-pdf">
-                <div style={{ fontSize: '3rem' }}>📄</div>
+                <div style={{ fontSize: '3rem' }}></div>
                 <h3>No answer uploaded</h3>
                 <p className="muted">The student has not submitted an answer file.</p>
               </div>
@@ -413,11 +413,11 @@ export function ReviewSubmissionPage() {
         {/* Right: Evaluation panel — only overall feedback, not required */}
         <aside className="rev-eval-panel">
           <div className="rev-eval-scroll">
-            <h3 className="rev-eval-heading">📊 Evaluation</h3>
+            <h3 className="rev-eval-heading">Evaluation</h3>
 
             {completed && (
               <div className="rev-already-done">
-                ✅ This submission has already been evaluated.
+                This submission has already been evaluated.
               </div>
             )}
 
@@ -444,18 +444,18 @@ export function ReviewSubmissionPage() {
                     disabled={draftBusy || busy}
                     onClick={saveDraft}
                   >
-                    {draftBusy ? '💾 Saving…' : '💾 Save draft'}
+                    {draftBusy ? 'Saving…' : 'Save draft'}
                   </button>
 
                   {/* Submit */}
                   <button className="btn primary rev-submit-btn" disabled={busy || draftBusy}>
                     {exportStatus === 'exporting'
-                      ? '📄 Exporting PDF…'
+                      ? 'Exporting PDF…'
                       : exportStatus === 'uploading'
-                        ? '☁️ Uploading…'
+                        ? 'Uploading…'
                         : busy
                           ? 'Submitting…'
-                          : '✅ Submit evaluation'}
+                          : 'Submit evaluation'}
                   </button>
                 </div>
               )}
@@ -463,7 +463,7 @@ export function ReviewSubmissionPage() {
               {/* Draft status message */}
               {draftMsg && (
                 <div className={`rev-draft-toast ${draftMsg.ok ? 'ok' : 'err'}`}>
-                  {draftMsg.ok ? '✅' : '⚠️'} {draftMsg.text}
+                  {draftMsg.ok ? '' : ''} {draftMsg.text}
                 </div>
               )}
 

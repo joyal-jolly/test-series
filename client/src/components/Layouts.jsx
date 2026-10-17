@@ -70,11 +70,11 @@ export function PublicLayout({ children }) {
             Programs for CA Intermediate, CA Final, and Crash Courses with residential immersion.
           </p>
           <div className="footer-contact-info">
-            <p>📍 Kadalikadu P.O., Manjalloor, Vazhakulam, Ernakulam, Kerala</p>
+            <p>Kadalikadu P.O., Manjalloor, Vazhakulam, Ernakulam, Kerala</p>
             <p>
-              📞 <a href="tel:+916282955052">+91 6282955052</a>
+              <a href="tel:+916282955052">+91 6282955052</a>
               <span className="bullet">·</span>
-              ✉️ <a href="mailto:mentauraca@gmail.com">mentauraca@gmail.com</a>
+              <a href="mailto:mentauraca@gmail.com">mentauraca@gmail.com</a>
             </p>
           </div>
         </div>
