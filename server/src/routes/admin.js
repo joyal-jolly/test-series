@@ -188,6 +188,202 @@ router.delete('/users/:id', async (req, res, next) => {
   }
 });
 
+// ─── Question Paper Groups ──────────────────────────────────────────────
+
+router.get('/groups', async (_req, res, next) => {
+  try {
+    const [groups, allPapers, subjects, allSchedules] = await Promise.all([
+      dbService.getQuestionPaperGroups(),
+      dbService.getQuestionPapers(),
+      dbService.getSubjects(),
+      dbService.getAllSchedules(),
+    ]);
+
+    const enrichedGroups = groups.map((g) => {
+      const papers = allPapers.filter((p) => p.groupId === g.id);
+      const groupSchedules = allSchedules.filter((s) => s.groupId === g.id);
+      const maxSubjects = g.numSubjectsPerSchedule || 3;
+
+      const schedules = [];
+      for (let i = 1; i <= g.numSchedules; i++) {
+        const schedRecord = groupSchedules.find((s) => s.scheduleNumber === i);
+        const schedPapers = papers
+          .filter((p) => p.scheduleNumber === i)
+          .map((paper) => {
+            const subject = subjects.find((s) => s.id === paper.subjectId);
+            return {
+              id: paper.id,
+              title: paper.title,
+              subjectId: paper.subjectId,
+              subjectName: subject?.name || 'Unknown',
+              caLevel: paper.caLevel,
+              paperType: paper.paperType,
+              chapter: paper.chapter || '',
+              totalMarks: paper.totalMarks,
+              durationMinutes: paper.durationMinutes,
+              pdfUrl: paper.pdfUrl,
+              status: paper.status,
+              availableAt: paper.availableAt,
+              createdAt: paper.createdAt,
+            };
+          });
+
+        const availableAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+
+        schedules.push({
+          scheduleNumber: i,
+          availableAt,
+          numSubjectsExpected: maxSubjects,
+          papers: schedPapers,
+          uploadedCount: schedPapers.length,
+          status: schedPapers.length >= maxSubjects ? 'uploaded' : schedPapers.length > 0 ? 'in_progress' : 'pending',
+        });
+      }
+
+      const totalExpectedPapers = g.numSchedules * maxSubjects;
+      const totalUploadedPapers = papers.length;
+
+      return {
+        ...g,
+        numSubjectsPerSchedule: maxSubjects,
+        schedules,
+        totalExpectedPapers,
+        totalUploadedPapers,
+        completeSchedulesCount: schedules.filter((s) => s.status === 'uploaded').length,
+        pendingSchedulesCount: schedules.filter((s) => s.status === 'pending').length,
+      };
+    });
+
+    res.json({ groups: enrichedGroups });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/groups/:id', async (req, res, next) => {
+  try {
+    const [group, allPapers, subjects, groupSchedules] = await Promise.all([
+      dbService.getQuestionPaperGroupById(req.params.id),
+      dbService.getQuestionPapersByGroup(req.params.id),
+      dbService.getSubjects(),
+      dbService.getSchedulesByGroup(req.params.id),
+    ]);
+
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+
+    const maxSubjects = group.numSubjectsPerSchedule || 3;
+    const schedules = [];
+    for (let i = 1; i <= group.numSchedules; i++) {
+      const schedRecord = groupSchedules.find((s) => s.scheduleNumber === i);
+      const schedPapers = allPapers
+        .filter((p) => p.scheduleNumber === i)
+        .map((paper) => {
+          const subject = subjects.find((s) => s.id === paper.subjectId);
+          return {
+            ...paper,
+            subjectName: subject?.name || 'Unknown',
+          };
+        });
+
+      const availableAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+
+      schedules.push({
+        scheduleNumber: i,
+        availableAt,
+        numSubjectsExpected: maxSubjects,
+        papers: schedPapers,
+        status: schedPapers.length >= maxSubjects ? 'uploaded' : schedPapers.length > 0 ? 'in_progress' : 'pending',
+      });
+    }
+
+    res.json({ group: { ...group, numSubjectsPerSchedule: maxSubjects, schedules } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/groups', async (req, res, next) => {
+  try {
+    const { name, description, numSchedules, numSubjectsPerSchedule } = req.body || {};
+    if (!name || !numSchedules || numSchedules < 1) {
+      return res.status(400).json({ error: 'name and numSchedules (>= 1) are required' });
+    }
+
+    const subjectsCount = Number(numSubjectsPerSchedule) >= 1 ? Number(numSubjectsPerSchedule) : 3;
+    const now = new Date().toISOString();
+    const group = {
+      id: uuid(),
+      name: name.trim(),
+      description: description || '',
+      numSchedules: Number(numSchedules),
+      numSubjectsPerSchedule: subjectsCount,
+      createdBy: req.user.id,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await dbService.createQuestionPaperGroup(group);
+    res.status(201).json({ group });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/groups/:id', async (req, res, next) => {
+  try {
+    const existing = await dbService.getQuestionPaperGroupById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Group not found' });
+
+    const updates = {};
+    if (req.body.name !== undefined) updates.name = req.body.name.trim();
+    if (req.body.description !== undefined) updates.description = req.body.description;
+    if (req.body.numSchedules !== undefined) {
+      const num = Number(req.body.numSchedules);
+      if (num < 1) return res.status(400).json({ error: 'numSchedules must be >= 1' });
+      updates.numSchedules = num;
+    }
+    if (req.body.numSubjectsPerSchedule !== undefined) {
+      const numSub = Number(req.body.numSubjectsPerSchedule);
+      if (numSub < 1) return res.status(400).json({ error: 'numSubjectsPerSchedule must be >= 1' });
+      updates.numSubjectsPerSchedule = numSub;
+    }
+
+    const updated = await dbService.updateQuestionPaperGroup(req.params.id, updates);
+    res.json({ group: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update the single scheduled date & time for a whole schedule
+router.patch('/groups/:id/schedules/:scheduleNumber', async (req, res, next) => {
+  try {
+    const { availableAt } = req.body || {};
+    const updated = await dbService.setScheduleAvailableAt(
+      req.params.id,
+      req.params.scheduleNumber,
+      availableAt || null
+    );
+    res.json({ ok: true, schedule: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/groups/:id', async (req, res, next) => {
+  try {
+    const existing = await dbService.getQuestionPaperGroupById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Group not found' });
+
+    await dbService.deleteQuestionPaperGroup(req.params.id);
+    res.json({ ok: true, message: 'Group deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Question Papers (with group/schedule support) ──────────────────────
+
 router.post('/papers', (req, res, next) => {
   upload.single('pdf')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -204,10 +400,45 @@ router.post('/papers', (req, res, next) => {
         durationMinutes,
         questionsJson,
         status,
+        groupId,
+        scheduleNumber,
+        availableAt,
       } = req.body || {};
 
       if (!title || !subjectId || !caLevel || !paperType) {
         return res.status(400).json({ error: 'title, subjectId, caLevel, and paperType are required' });
+      }
+
+      let paperAvailableAt = availableAt || null;
+
+      // If groupId + scheduleNumber provided, verify group exists and subject slot is open
+      if (groupId && scheduleNumber) {
+        const group = await dbService.getQuestionPaperGroupById(groupId);
+        if (!group) return res.status(404).json({ error: 'Group not found' });
+        const schedNum = Number(scheduleNumber);
+        if (schedNum < 1 || schedNum > group.numSchedules) {
+          return res.status(400).json({ error: `Schedule number must be between 1 and ${group.numSchedules}` });
+        }
+        const maxSubjects = group.numSubjectsPerSchedule || 3;
+        const existing = await dbService.getQuestionPapersByGroup(groupId);
+        const existingInSchedule = existing.filter((p) => p.scheduleNumber === schedNum);
+
+        // Check if paper for this subject is already uploaded
+        const duplicateSubject = existingInSchedule.find((p) => p.subjectId === subjectId);
+        if (duplicateSubject) {
+          return res.status(409).json({ error: `A question paper for this subject is already uploaded in Schedule ${schedNum}.` });
+        }
+
+        if (existingInSchedule.length >= maxSubjects) {
+          return res.status(409).json({ error: `Schedule ${schedNum} already has all ${maxSubjects} subject question papers assigned.` });
+        }
+
+        // Inherit the schedule's existing availableAt if not provided
+        if (!paperAvailableAt) {
+          const groupSchedules = await dbService.getSchedulesByGroup(groupId);
+          const schedRecord = groupSchedules.find((s) => s.scheduleNumber === schedNum);
+          paperAvailableAt = schedRecord?.availableAt || existingInSchedule[0]?.availableAt || null;
+        }
       }
 
       let questions = [];
@@ -248,6 +479,9 @@ router.post('/papers', (req, res, next) => {
         createdBy: req.user.id,
         createdAt: now,
         updatedAt: now,
+        groupId: groupId || null,
+        scheduleNumber: scheduleNumber ? Number(scheduleNumber) : null,
+        availableAt: paperAvailableAt || null,
         questions: questions.map((q, i) => ({
           id: q.id || uuid(),
           number: q.number || i + 1,
@@ -321,6 +555,17 @@ router.patch('/papers/:id', (req, res, next) => {
         if (req.body.status === 'published' && !existing.publishedAt) {
           updates.publishedAt = new Date().toISOString();
         }
+      }
+
+      // Group/schedule fields
+      if (req.body.availableAt !== undefined) {
+        updates.availableAt = req.body.availableAt || null;
+      }
+      if (req.body.groupId !== undefined) {
+        updates.groupId = req.body.groupId || null;
+      }
+      if (req.body.scheduleNumber !== undefined) {
+        updates.scheduleNumber = req.body.scheduleNumber ? Number(req.body.scheduleNumber) : null;
       }
 
       const updated = await dbService.updateQuestionPaper(req.params.id, updates);

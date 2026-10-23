@@ -110,342 +110,817 @@ export function AdminDashboard() {
   );
 }
 
+// ─── Helper: format datetime-local value ──────────────────────────────────
+function toDateTimeLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatScheduleDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function scheduleStatusPill(sched) {
+  if (!sched || !sched.paper) {
+    return <span className="pill draft">Pending</span>;
+  }
+  const isFuture = sched.paper.availableAt && new Date(sched.paper.availableAt) > new Date();
+  if (isFuture) {
+    return <span className="pill assigned">Scheduled</span>;
+  }
+  return <span className="pill published">Uploaded</span>;
+}
+
+// ─── Admin Papers: Group → Schedule → Multi-Subject Paper Management ─────
 export function AdminPapers() {
-  const [papers, setPapers] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [form, setForm] = useState({
+  const [expandedGroup, setExpandedGroup] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Create group form
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupForm, setGroupForm] = useState({
+    name: '',
+    description: '',
+    numSchedules: 5,
+    numSubjectsPerSchedule: 3,
+  });
+  const [groupError, setGroupError] = useState('');
+  const [groupMessage, setGroupMessage] = useState('');
+
+  // Edit group modal
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [editGroupError, setEditGroupError] = useState('');
+
+  // Schedule Date/Time modal (shared date & time for the whole schedule)
+  const [scheduleDateModal, setScheduleDateModal] = useState(null);
+  const [scheduleDateForm, setScheduleDateForm] = useState({ availableDate: '', availableTime: '' });
+  const [scheduleDateError, setScheduleDateError] = useState('');
+  const [scheduleDateLoading, setScheduleDateLoading] = useState(false);
+
+  // Upload/edit paper modal for a schedule slot
+  const [paperModal, setPaperModal] = useState(null);
+  const [paperForm, setPaperForm] = useState({
     title: '',
     subjectId: '',
     caLevel: 'Intermediate',
     paperType: 'Group 1',
+    chapter: '',
     totalMarks: 100,
     durationMinutes: 180,
   });
-  const [pdf, setPdf] = useState(null);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  const [fileInputKey, setFileInputKey] = useState(Date.now());
-
-  // Edit paper modal state
-  const [editingPaper, setEditingPaper] = useState(null);
-  const [editPdf, setEditPdf] = useState(null);
-  const [editError, setEditError] = useState('');
-  const [editLoading, setEditLoading] = useState(false);
+  const [paperPdf, setPaperPdf] = useState(null);
+  const [paperError, setPaperError] = useState('');
+  const [paperLoading, setPaperLoading] = useState(false);
 
   function reload() {
-    api('/api/papers').then((d) => setPapers(d.papers));
+    setLoading(true);
+    api('/api/admin/groups')
+      .then((gd) => {
+        setGroups(gd.groups || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }
 
   useEffect(() => {
     reload();
     api('/api/papers/subjects').then((d) => {
-      setSubjects(d.subjects);
-      setForm((f) => ({ ...f, subjectId: d.subjects[0]?.id || '' }));
+      setSubjects(d.subjects || []);
     });
   }, []);
 
-  async function createPaper(e) {
+  // ── Create Group ──
+  async function createGroup(e) {
     e.preventDefault();
-    setError('');
-    setMessage('');
+    setGroupError('');
+    setGroupMessage('');
     try {
-      const body = new FormData();
-      Object.entries(form).forEach(([k, v]) => body.append(k, v));
-      body.append('status', 'published');
-      if (pdf) body.append('pdf', pdf);
-      await api('/api/admin/papers', { method: 'POST', body });
-      setMessage('Question paper published successfully.');
-      setForm((f) => ({
-        ...f,
-        title: '',
-      }));
-      setPdf(null);
-      setFileInputKey(Date.now());
-      reload();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  async function deletePaper(id) {
-    if (!window.confirm('Are you sure you want to delete this question paper? This will also remove any attempts associated with it.')) {
-      return;
-    }
-    setError('');
-    setMessage('');
-    try {
-      await api(`/api/admin/papers/${id}`, { method: 'DELETE' });
-      setMessage('Question paper deleted.');
-      reload();
-    } catch (err) {
-      setError(err.message);
-    }
-  }
-
-  function startEdit(p) {
-    setEditingPaper({
-      id: p.id,
-      title: p.title || '',
-      subjectId: p.subjectId || subjects[0]?.id || '',
-      caLevel: p.caLevel || 'Intermediate',
-      paperType: p.paperType === 'Group 2' ? 'Group 2' : 'Group 1',
-      totalMarks: p.totalMarks || 100,
-      durationMinutes: p.durationMinutes || 180,
-      pdfUrl: p.pdfUrl || null,
-    });
-    setEditPdf(null);
-    setEditError('');
-  }
-
-  async function saveEdit(e) {
-    e.preventDefault();
-    setEditError('');
-    setEditLoading(true);
-    try {
-      const body = new FormData();
-      body.append('title', editingPaper.title);
-      body.append('subjectId', editingPaper.subjectId);
-      body.append('caLevel', editingPaper.caLevel);
-      body.append('paperType', editingPaper.paperType);
-      body.append('totalMarks', editingPaper.totalMarks);
-      body.append('durationMinutes', editingPaper.durationMinutes);
-      if (editPdf) {
-        body.append('pdf', editPdf);
-      }
-      await api(`/api/admin/papers/${editingPaper.id}`, {
-        method: 'PATCH',
-        body,
+      await api('/api/admin/groups', {
+        method: 'POST',
+        body: {
+          name: groupForm.name,
+          description: groupForm.description,
+          numSchedules: Number(groupForm.numSchedules),
+          numSubjectsPerSchedule: Number(groupForm.numSubjectsPerSchedule),
+        },
       });
-      setEditingPaper(null);
-      setEditPdf(null);
-      setMessage('Question paper updated successfully.');
+      setGroupMessage('Group created successfully.');
+      setGroupForm({ name: '', description: '', numSchedules: 5, numSubjectsPerSchedule: 3 });
+      setShowCreateGroup(false);
       reload();
     } catch (err) {
-      setEditError(err.message);
+      setGroupError(err.message);
+    }
+  }
+
+  // ── Delete Group ──
+  async function deleteGroup(id) {
+    if (!window.confirm('Delete this group? Question papers inside will be unlinked.')) return;
+    try {
+      await api(`/api/admin/groups/${id}`, { method: 'DELETE' });
+      reload();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ── Save Edit Group ──
+  async function saveEditGroup(e) {
+    e.preventDefault();
+    setEditGroupError('');
+    try {
+      await api(`/api/admin/groups/${editingGroup.id}`, {
+        method: 'PATCH',
+        body: {
+          name: editingGroup.name,
+          description: editingGroup.description,
+          numSchedules: Number(editingGroup.numSchedules),
+          numSubjectsPerSchedule: Number(editingGroup.numSubjectsPerSchedule),
+        },
+      });
+      setEditingGroup(null);
+      reload();
+    } catch (err) {
+      setEditGroupError(err.message);
+    }
+  }
+
+  // ── Open Schedule Date/Time Modal ──
+  function openScheduleDateModal(groupId, groupName, scheduleNumber, availableAt) {
+    let dStr = '';
+    let tStr = '';
+    if (availableAt) {
+      const d = new Date(availableAt);
+      const pad = (n) => String(n).padStart(2, '0');
+      dStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      tStr = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    setScheduleDateForm({ availableDate: dStr, availableTime: tStr });
+    setScheduleDateError('');
+    setScheduleDateModal({ groupId, groupName, scheduleNumber });
+  }
+
+  // ── Save Schedule Date/Time ──
+  async function saveScheduleDate(e) {
+    e.preventDefault();
+    setScheduleDateError('');
+    setScheduleDateLoading(true);
+    try {
+      let iso = null;
+      if (scheduleDateForm.availableDate) {
+        const timeStr = scheduleDateForm.availableTime || '00:00';
+        iso = new Date(`${scheduleDateForm.availableDate}T${timeStr}:00`).toISOString();
+      }
+
+      await api(`/api/admin/groups/${scheduleDateModal.groupId}/schedules/${scheduleDateModal.scheduleNumber}`, {
+        method: 'PATCH',
+        body: { availableAt: iso },
+      });
+
+      setScheduleDateModal(null);
+      reload();
+    } catch (err) {
+      setScheduleDateError(err.message);
     } finally {
-      setEditLoading(false);
+      setScheduleDateLoading(false);
+    }
+  }
+
+  // ── Open Paper Modal (Upload or Edit) ──
+  function openPaperModal(groupId, groupName, scheduleNumber, existingPaper, scheduleAvailableAt, existingPapers = []) {
+    if (existingPaper) {
+      setPaperForm({
+        title: existingPaper.title || '',
+        subjectId: existingPaper.subjectId || subjects[0]?.id || '',
+        caLevel: existingPaper.caLevel || 'Intermediate',
+        paperType: existingPaper.paperType || 'Group 1',
+        chapter: existingPaper.chapter || '',
+        totalMarks: existingPaper.totalMarks || 100,
+        durationMinutes: existingPaper.durationMinutes || 180,
+      });
+    } else {
+      // Find the first subject not yet uploaded in this schedule
+      const usedSubjectIds = (existingPapers || []).map((p) => p.subjectId);
+      const nextAvailableSubject = subjects.find((s) => !usedSubjectIds.includes(s.id)) || subjects[0];
+
+      setPaperForm({
+        title: nextAvailableSubject ? `Schedule ${scheduleNumber} - ${nextAvailableSubject.name}` : `Schedule ${scheduleNumber} Paper`,
+        subjectId: nextAvailableSubject?.id || subjects[0]?.id || '',
+        caLevel: 'Intermediate',
+        paperType: 'Group 1',
+        chapter: '',
+        totalMarks: 100,
+        durationMinutes: 180,
+      });
+    }
+    setPaperPdf(null);
+    setPaperError('');
+    setPaperModal({
+      groupId,
+      groupName,
+      scheduleNumber,
+      existingPaper: existingPaper || null,
+      scheduleAvailableAt,
+      existingPapers: existingPapers || [],
+    });
+  }
+
+  // ── Save Paper ──
+  async function savePaper(e) {
+    e.preventDefault();
+    setPaperError('');
+    setPaperLoading(true);
+    try {
+      const body = new FormData();
+      body.append('title', paperForm.title);
+      body.append('subjectId', paperForm.subjectId);
+      body.append('caLevel', paperForm.caLevel);
+      body.append('paperType', paperForm.paperType);
+      if (paperForm.chapter) body.append('chapter', paperForm.chapter);
+      body.append('totalMarks', paperForm.totalMarks);
+      body.append('durationMinutes', paperForm.durationMinutes);
+      body.append('status', 'published');
+
+      if (paperPdf) body.append('pdf', paperPdf);
+
+      if (paperModal.existingPaper) {
+        // Update existing paper
+        await api(`/api/admin/papers/${paperModal.existingPaper.id}`, {
+          method: 'PATCH',
+          body,
+        });
+      } else {
+        // Create new paper for this schedule
+        body.append('groupId', paperModal.groupId);
+        body.append('scheduleNumber', paperModal.scheduleNumber);
+        if (paperModal.scheduleAvailableAt) {
+          body.append('availableAt', paperModal.scheduleAvailableAt);
+        }
+        await api('/api/admin/papers', { method: 'POST', body });
+      }
+
+      setPaperModal(null);
+      reload();
+    } catch (err) {
+      setPaperError(err.message);
+    } finally {
+      setPaperLoading(false);
+    }
+  }
+
+  // ── Delete paper ──
+  async function deletePaper(paperId) {
+    if (!window.confirm('Delete this question paper? This will also remove any attempts.')) return;
+    try {
+      await api(`/api/admin/papers/${paperId}`, { method: 'DELETE' });
+      reload();
+    } catch (err) {
+      alert(err.message);
     }
   }
 
   return (
     <AdminPortalLayout>
-      <div className="split-admin">
-        <form className="panel form" onSubmit={createPaper}>
-          <h2>Upload question paper</h2>
-          <label>
-            Title
-            <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-          </label>
-          <label>
-            Subject
-            <select value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })}>
-              {subjects.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="row-2">
-            <label>
-              CA Level
-              <select value={form.caLevel} onChange={(e) => setForm({ ...form, caLevel: e.target.value })}>
-                <option>Intermediate</option>
-                <option>Final</option>
-              </select>
-            </label>
-            <label>
-              Test
-              <select value={form.paperType} onChange={(e) => setForm({ ...form, paperType: e.target.value })}>
-                <option value="Group 1">Group 1</option>
-                <option value="Group 2">Group 2</option>
-              </select>
-            </label>
-          </div>
-          <div className="row-2">
-            <label>
-              Total marks
-              <input
-                type="number"
-                value={form.totalMarks}
-                onChange={(e) => setForm({ ...form, totalMarks: e.target.value })}
-              />
-            </label>
-            <label>
-              Duration (min)
-              <input
-                type="number"
-                value={form.durationMinutes}
-                onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })}
-              />
-            </label>
-          </div>
-          <label>
-            Question PDF (optional)
-            <input
-              key={fileInputKey}
-              type="file"
-              accept=".pdf"
-              onChange={(e) => setPdf(e.target.files?.[0] || null)}
-            />
-          </label>
-          {error && <p className="error">{error}</p>}
-          {message && <p className="success">{message}</p>}
-          <button className="btn primary">Publish paper</button>
-        </form>
-
-        <div className="panel">
-          <h2>All papers</h2>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {papers.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <strong>{p.title}</strong>
-                    <div className="muted">
-                      {p.caLevel} · {p.paperType} · {p.subjectName || 'Subject'}
-                    </div>
-                    {p.pdfUrl && (
-                      <div style={{ marginTop: '0.25rem' }}>
-                        <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="muted" style={{ fontSize: '0.85rem', textDecoration: 'underline' }}>
-                          View PDF
-                        </a>
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <div className="table-actions">
-                      <button type="button" className="btn subtle" onClick={() => startEdit(p)}>
-                        Edit
-                      </button>
-                      <button type="button" className="btn subtle danger" onClick={() => deletePaper(p.id)}>
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {papers.length === 0 && (
-                <tr>
-                  <td colSpan={2} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
-                    No question papers found.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {/* ── Header with Create Group button ── */}
+      <div className="panel-head" style={{ marginBottom: '1rem' }}>
+        <div>
+          <h2>Question Paper Groups</h2>
+          <p className="muted" style={{ fontSize: '0.88rem', margin: '0.2rem 0 0' }}>
+            Organize question papers by Group and Schedules. Each schedule holds question papers for multiple subjects sharing a common scheduled release time.
+          </p>
         </div>
+        <button className="btn primary" onClick={() => setShowCreateGroup(!showCreateGroup)}>
+          {showCreateGroup ? 'Cancel' : '+ Create Group'}
+        </button>
       </div>
 
-      {editingPaper && (
-        <div className="modal-backdrop" onClick={() => setEditingPaper(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      {groupMessage && <p className="success" style={{ marginBottom: '1rem' }}>{groupMessage}</p>}
+
+      {/* ── Create Group Form ── */}
+      {showCreateGroup && (
+        <div className="panel form" style={{ marginBottom: '1.5rem' }}>
+          <h3>Create new question paper group</h3>
+          <form onSubmit={createGroup}>
+            <label>
+              Group Name
+              <input
+                value={groupForm.name}
+                onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+                placeholder="e.g. CA Intermediate Test Series"
+                required
+              />
+            </label>
+            <label>
+              Description (optional)
+              <input
+                value={groupForm.description}
+                onChange={(e) => setGroupForm({ ...groupForm, description: e.target.value })}
+                placeholder="Brief description of this test series group"
+              />
+            </label>
+            <div className="row-2">
+              <label>
+                Number of Schedules
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={groupForm.numSchedules}
+                  onChange={(e) => setGroupForm({ ...groupForm, numSchedules: e.target.value })}
+                  required
+                />
+                <span className="muted" style={{ fontSize: '0.8rem' }}>
+                  e.g. 5 schedules (Schedule 1, 2, 3, 4, 5)
+                </span>
+              </label>
+              <label>
+                Subjects per Schedule
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={groupForm.numSubjectsPerSchedule}
+                  onChange={(e) => setGroupForm({ ...groupForm, numSubjectsPerSchedule: e.target.value })}
+                  required
+                />
+                <span className="muted" style={{ fontSize: '0.8rem' }}>
+                  e.g. 3 subjects (3 papers uploaded per schedule)
+                </span>
+              </label>
+            </div>
+            {groupError && <p className="error">{groupError}</p>}
+            <button className="btn primary" style={{ marginTop: '0.5rem' }}>Create Group</button>
+          </form>
+        </div>
+      )}
+
+      {/* ── Groups List ── */}
+      {loading ? (
+        <p className="muted">Loading groups…</p>
+      ) : groups.length === 0 ? (
+        <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p className="muted">No question paper groups yet. Create a group to start organizing question papers.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {groups.map((g) => {
+            const isExpanded = expandedGroup === g.id;
+            const expectedSubjects = g.numSubjectsPerSchedule || 3;
+
+            return (
+              <div key={g.id} className="panel group-panel" style={{ padding: '1.25rem 1.5rem', borderRadius: '12px' }}>
+                {/* Group Header */}
+                <div
+                  className="group-header"
+                  onClick={() => setExpandedGroup(isExpanded ? null : g.id)}
+                  style={{
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    userSelect: 'none',
+                  }}
+                >
+                  <div>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.2rem' }}>
+                      <span style={{ fontSize: '0.85rem', transition: 'transform 0.2s', display: 'inline-block', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                        ▶
+                      </span>
+                      {g.name}
+                    </h3>
+                    {g.description && <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.85rem' }}>{g.description}</p>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                    <span className="pill info" style={{ fontSize: '0.8rem' }}>
+                      {g.numSchedules} Schedules · {expectedSubjects} Subjects/Schedule
+                    </span>
+                    <span className="pill published" style={{ fontSize: '0.8rem' }}>
+                      {g.totalUploadedPapers || 0} / {g.totalExpectedPapers || (g.numSchedules * expectedSubjects)} Papers
+                    </span>
+                    <button
+                      type="button"
+                      className="btn subtle"
+                      onClick={(e) => { e.stopPropagation(); setEditingGroup({ ...g }); }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn subtle danger"
+                      onClick={(e) => { e.stopPropagation(); deleteGroup(g.id); }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {/* Schedules Under this Group */}
+                {isExpanded && (
+                  <div style={{ marginTop: '1.25rem', borderTop: '1px solid var(--border, #eee)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {g.schedules.map((sched) => {
+                      const papers = sched.papers || [];
+                      const canAddMore = papers.length < expectedSubjects;
+
+                      return (
+                        <div
+                          key={sched.scheduleNumber}
+                          style={{
+                            border: '1px solid var(--border, #e5e7eb)',
+                            borderRadius: '10px',
+                            background: '#fafafa',
+                            overflow: 'hidden',
+                          }}
+                        >
+                          {/* Schedule Bar */}
+                          <div
+                            style={{
+                              padding: '0.85rem 1.25rem',
+                              background: '#f3f4f6',
+                              borderBottom: '1px solid var(--border, #e5e7eb)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              flexWrap: 'wrap',
+                              gap: '0.75rem',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <strong style={{ fontSize: '1rem' }}>Schedule {sched.scheduleNumber}</strong>
+                              <span className={`pill ${papers.length >= expectedSubjects ? 'published' : papers.length > 0 ? 'assigned' : 'draft'}`} style={{ fontSize: '0.78rem' }}>
+                                {papers.length} / {expectedSubjects} Subjects Uploaded
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                                <span className="muted">Scheduled Access:</span>
+                                <strong>{formatScheduleDate(sched.availableAt)}</strong>
+                                <button
+                                  type="button"
+                                  className="btn subtle"
+                                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                                  onClick={() => openScheduleDateModal(g.id, g.name, sched.scheduleNumber, sched.availableAt)}
+                                >
+                                  {sched.availableAt ? 'Change Date/Time' : 'Set Date/Time'}
+                                </button>
+                              </div>
+
+                              {canAddMore && (
+                                <button
+                                  type="button"
+                                  className="btn primary"
+                                  style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                                  onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, null, sched.availableAt, papers)}
+                                >
+                                  + Upload Subject Paper ({papers.length + 1}/{expectedSubjects})
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Subject Papers in this Schedule */}
+                          <div style={{ padding: '0.75rem 1.25rem' }}>
+                            {papers.length === 0 ? (
+                              <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem' }}>
+                                No subject question papers uploaded yet. Click <strong>&quot;+ Upload Subject Paper&quot;</strong> to upload papers for up to {expectedSubjects} subjects.
+                              </div>
+                            ) : (
+                              <table className="data-table" style={{ background: '#fff', borderRadius: '6px' }}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ width: '14rem' }}>Subject</th>
+                                    <th>Paper Title</th>
+                                    <th>Subject Type</th>
+                                    <th>Marks &amp; Duration</th>
+                                    <th style={{ textAlign: 'right' }}>Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {papers.map((p) => (
+                                    <tr key={p.id}>
+                                      <td>
+                                        <strong style={{ fontSize: '0.92rem' }}>{p.subjectName}</strong>
+                                        <div className="muted" style={{ fontSize: '0.78rem' }}>{p.caLevel}</div>
+                                      </td>
+                                      <td>
+                                        <span style={{ fontWeight: 500 }}>{p.title}</span>
+                                        {p.chapter && <div className="muted" style={{ fontSize: '0.78rem' }}>{p.chapter}</div>}
+                                      </td>
+                                      <td>
+                                        <span className="pill info" style={{ fontSize: '0.75rem' }}>{p.paperType}</span>
+                                      </td>
+                                      <td>
+                                        <span style={{ fontSize: '0.85rem' }}>{p.totalMarks} marks · {p.durationMinutes} min</span>
+                                      </td>
+                                      <td style={{ textAlign: 'right' }}>
+                                        <div className="table-actions" style={{ justifyContent: 'flex-end' }}>
+                                          <button
+                                            type="button"
+                                            className="btn subtle"
+                                            onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, p, sched.availableAt, papers)}
+                                          >
+                                            Edit
+                                          </button>
+                                          {p.pdfUrl && (
+                                            <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="btn subtle">
+                                              PDF
+                                            </a>
+                                          )}
+                                          <button
+                                            type="button"
+                                            className="btn subtle danger"
+                                            onClick={() => deletePaper(p.id)}
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Schedule Date/Time Modal ── */}
+      {scheduleDateModal && (
+        <div className="modal-backdrop" onClick={() => setScheduleDateModal(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
             <div className="modal-head">
-              <h2>Edit question paper</h2>
+              <h2>Schedule {scheduleDateModal.scheduleNumber} &ndash; Access Date &amp; Time</h2>
               <button
                 type="button"
                 className="btn subtle"
-                onClick={() => setEditingPaper(null)}
+                onClick={() => setScheduleDateModal(null)}
                 style={{ padding: '0.35rem 0.75rem', borderRadius: '50%' }}
               >
                 ✕
               </button>
             </div>
-            <form className="form" onSubmit={saveEdit}>
+            <p className="muted" style={{ fontSize: '0.88rem', margin: '0 0 1rem' }}>
+              Set the scheduled date and time when all subject question papers under <strong>Schedule {scheduleDateModal.scheduleNumber}</strong> become accessible to students.
+            </p>
+            <form className="form" onSubmit={saveScheduleDate}>
+              <div className="row-2">
+                <label>
+                  Available/Open Date
+                  <input
+                    type="date"
+                    value={scheduleDateForm.availableDate}
+                    onChange={(e) => setScheduleDateForm({ ...scheduleDateForm, availableDate: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Available/Open Time
+                  <input
+                    type="time"
+                    value={scheduleDateForm.availableTime}
+                    onChange={(e) => setScheduleDateForm({ ...scheduleDateForm, availableTime: e.target.value })}
+                  />
+                </label>
+              </div>
+              <span className="muted" style={{ fontSize: '0.8rem', display: 'block', marginTop: '-0.25rem', marginBottom: '1rem' }}>
+                Clear fields for immediate access without restrictions.
+              </span>
+              {scheduleDateError && <p className="error">{scheduleDateError}</p>}
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    setScheduleDateForm({ availableDate: '', availableTime: '' });
+                  }}
+                >
+                  Clear (Immediate)
+                </button>
+                <button type="submit" className="btn primary" disabled={scheduleDateLoading}>
+                  {scheduleDateLoading ? 'Saving…' : 'Save Date & Time'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Group Modal ── */}
+      {editingGroup && (
+        <div className="modal-backdrop" onClick={() => setEditingGroup(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Edit Group</h2>
+              <button type="button" className="btn subtle" onClick={() => setEditingGroup(null)} style={{ padding: '0.35rem 0.75rem', borderRadius: '50%' }}>✕</button>
+            </div>
+            <form className="form" onSubmit={saveEditGroup}>
               <label>
-                Title
+                Group Name
                 <input
-                  value={editingPaper.title}
-                  onChange={(e) => setEditingPaper({ ...editingPaper, title: e.target.value })}
+                  value={editingGroup.name}
+                  onChange={(e) => setEditingGroup({ ...editingGroup, name: e.target.value })}
                   required
                 />
               </label>
               <label>
+                Description
+                <input
+                  value={editingGroup.description}
+                  onChange={(e) => setEditingGroup({ ...editingGroup, description: e.target.value })}
+                />
+              </label>
+              <div className="row-2">
+                <label>
+                  Number of Schedules
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={editingGroup.numSchedules}
+                    onChange={(e) => setEditingGroup({ ...editingGroup, numSchedules: e.target.value })}
+                    required
+                  />
+                </label>
+                <label>
+                  Subjects per Schedule
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={editingGroup.numSubjectsPerSchedule || 3}
+                    onChange={(e) => setEditingGroup({ ...editingGroup, numSubjectsPerSchedule: e.target.value })}
+                    required
+                  />
+                </label>
+              </div>
+              {editGroupError && <p className="error">{editGroupError}</p>}
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                <button type="button" className="btn ghost" onClick={() => setEditingGroup(null)}>Cancel</button>
+                <button type="submit" className="btn primary">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Paper Upload/Edit Modal ── */}
+      {paperModal && (
+        <div className="modal-backdrop" onClick={() => setPaperModal(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+            <div className="modal-head">
+              <h2>
+                {paperModal.existingPaper ? 'Edit' : 'Upload'} &ndash; Schedule {paperModal.scheduleNumber} Paper
+              </h2>
+              <button type="button" className="btn subtle" onClick={() => setPaperModal(null)} style={{ padding: '0.35rem 0.75rem', borderRadius: '50%' }}>✕</button>
+            </div>
+            <form className="form" onSubmit={savePaper}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                <span className="pill info" style={{ fontSize: '0.85rem' }}>
+                  Schedule {paperModal.scheduleNumber}
+                </span>
+                <span className="muted" style={{ fontSize: '0.85rem' }}>
+                  {paperModal.scheduleAvailableAt
+                    ? `Scheduled Access: ${formatScheduleDate(paperModal.scheduleAvailableAt)}`
+                    : 'Scheduled Access: Immediate'}
+                </span>
+              </div>
+
+              <label>
                 Subject
                 <select
-                  value={editingPaper.subjectId}
-                  onChange={(e) => setEditingPaper({ ...editingPaper, subjectId: e.target.value })}
+                  value={paperForm.subjectId}
+                  onChange={(e) => {
+                    const selSub = subjects.find((s) => s.id === e.target.value);
+                    setPaperForm({
+                      ...paperForm,
+                      subjectId: e.target.value,
+                      title: paperModal.existingPaper ? paperForm.title : (selSub ? `Schedule ${paperModal.scheduleNumber} - ${selSub.name}` : paperForm.title),
+                    });
+                  }}
+                  required
                 >
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
+                  {subjects.map((s) => {
+                    const isAlreadyUsed = !paperModal.existingPaper &&
+                      (paperModal.existingPapers || []).some((p) => p.subjectId === s.id);
+                    return (
+                      <option key={s.id} value={s.id} disabled={isAlreadyUsed}>
+                        {s.name} {isAlreadyUsed ? '(already uploaded for this schedule)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </label>
+
+              <label>
+                Paper Title
+                <input
+                  value={paperForm.title}
+                  onChange={(e) => setPaperForm({ ...paperForm, title: e.target.value })}
+                  placeholder="e.g. Schedule 1 - Advanced Accounting"
+                  required
+                />
+              </label>
+
               <div className="row-2">
                 <label>
                   CA Level
                   <select
-                    value={editingPaper.caLevel}
-                    onChange={(e) => setEditingPaper({ ...editingPaper, caLevel: e.target.value })}
+                    value={paperForm.caLevel}
+                    onChange={(e) => setPaperForm({ ...paperForm, caLevel: e.target.value })}
                   >
                     <option>Intermediate</option>
                     <option>Final</option>
                   </select>
                 </label>
                 <label>
-                  Test
+                  Subject Type
                   <select
-                    value={editingPaper.paperType}
-                    onChange={(e) => setEditingPaper({ ...editingPaper, paperType: e.target.value })}
+                    value={paperForm.paperType}
+                    onChange={(e) => setPaperForm({ ...paperForm, paperType: e.target.value })}
                   >
                     <option value="Group 1">Group 1</option>
                     <option value="Group 2">Group 2</option>
+                    <option value="Chapter Test">Chapter Test</option>
+                    <option value="Mock Test">Mock Test</option>
+                    <option value="Revision Test">Revision Test</option>
+                    <option value="Model Exam">Model Exam</option>
                   </select>
                 </label>
               </div>
+
+              <label>
+                Chapter / Topics (optional)
+                <input
+                  value={paperForm.chapter}
+                  onChange={(e) => setPaperForm({ ...paperForm, chapter: e.target.value })}
+                  placeholder="e.g. Chapter 1-3 or Full Syllabus"
+                />
+              </label>
+
               <div className="row-2">
                 <label>
-                  Total marks
+                  Total Marks
                   <input
                     type="number"
-                    value={editingPaper.totalMarks}
-                    onChange={(e) => setEditingPaper({ ...editingPaper, totalMarks: e.target.value })}
+                    value={paperForm.totalMarks}
+                    onChange={(e) => setPaperForm({ ...paperForm, totalMarks: e.target.value })}
                   />
                 </label>
                 <label>
                   Duration (min)
                   <input
                     type="number"
-                    value={editingPaper.durationMinutes}
-                    onChange={(e) => setEditingPaper({ ...editingPaper, durationMinutes: e.target.value })}
+                    value={paperForm.durationMinutes}
+                    onChange={(e) => setPaperForm({ ...paperForm, durationMinutes: e.target.value })}
                   />
                 </label>
               </div>
-              <label>
-                Current PDF
-                {editingPaper.pdfUrl ? (
+
+              {paperModal.existingPaper?.pdfUrl && (
+                <label>
+                  Current PDF
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
-                    <a href={editingPaper.pdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
-                      View current file ({editingPaper.pdfUrl.split('/').pop()})
+                    <a href={paperModal.existingPaper.pdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
+                      View current uploaded file
                     </a>
                   </div>
-                ) : (
-                  <span className="muted">No PDF file currently uploaded</span>
-                )}
-              </label>
+                </label>
+              )}
+
               <label>
-                Replace / Upload new PDF
+                {paperModal.existingPaper ? 'Replace / Upload new PDF' : 'Question Paper PDF'}
                 <input
                   type="file"
                   accept=".pdf"
-                  onChange={(e) => setEditPdf(e.target.files?.[0] || null)}
+                  onChange={(e) => setPaperPdf(e.target.files?.[0] || null)}
                 />
               </label>
-              {editError && <p className="error">{editError}</p>}
+
+              {paperError && <p className="error">{paperError}</p>}
+
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                <button type="button" className="btn ghost" onClick={() => setEditingPaper(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn primary" disabled={editLoading}>
-                  {editLoading ? 'Saving…' : 'Save changes'}
+                <button type="button" className="btn ghost" onClick={() => setPaperModal(null)}>Cancel</button>
+                <button type="submit" className="btn primary" disabled={paperLoading}>
+                  {paperLoading ? 'Saving…' : paperModal.existingPaper ? 'Save Changes' : 'Upload & Publish'}
                 </button>
               </div>
             </form>

@@ -124,6 +124,19 @@ router.post('/start', requireAuth, requireRole('student'), async (req, res, next
       return res.status(404).json({ error: 'Published question paper not found' });
     }
 
+    // Enforce scheduled access — block if paper has a future availableAt
+    if (paper.availableAt) {
+      const now = new Date();
+      const availableDate = new Date(paper.availableAt);
+      if (now < availableDate) {
+        return res.status(403).json({
+          error: 'This question paper is not yet available',
+          availableAt: paper.availableAt,
+          message: `Available on ${availableDate.toLocaleDateString()} at ${availableDate.toLocaleTimeString()}`,
+        });
+      }
+    }
+
     // Purge any previous incomplete/stale attempt for this paper by this student
     const allAttempts = await dbService.getAttempts();
     const staleIncomplete = allAttempts.filter(

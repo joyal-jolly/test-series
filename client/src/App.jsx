@@ -6,6 +6,7 @@ import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import PapersPage from './pages/PapersPage';
 import PaperDetailPage from './pages/PaperDetailPage';
+import GroupDetailPage from './pages/GroupDetailPage';
 import { LoginPage, RegisterPage } from './pages/AuthPages';
 import {
   AttemptPage,
@@ -35,6 +36,8 @@ export default function App() {
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/papers" element={<PapersPage />} />
+          <Route path="/groups/:id" element={<GroupDetailPage />} />
+          <Route path="/papers/groups/:id" element={<GroupDetailPage />} />
           <Route path="/papers/:id" element={<PaperDetailPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

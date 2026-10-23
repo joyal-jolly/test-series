@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { PublicLayout } from '../components/Layouts';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
+
+function formatDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function PaperDetailPage() {
   const { id } = useParams();
@@ -12,14 +25,44 @@ export default function PaperDetailPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  function fetchPaper() {
+    api(`/api/papers/${id}`)
+      .then((d) => {
+        setPaper(d.paper);
+      })
+      .catch((e) => setError(e.message));
+  }
 
   useEffect(() => {
-    api(`/api/papers/${id}`)
-      .then((d) => setPaper(d.paper))
-      .catch((e) => setError(e.message));
+    fetchPaper();
   }, [id]);
 
+  // Keep current time updated every 5 seconds to automatically unlock paper when scheduled time passes
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isScheduled = Boolean(paper?.availableAt);
+  const availableTimestamp = paper?.availableAt ? new Date(paper.availableAt).getTime() : 0;
+  const isAvailable = !isScheduled || now >= availableTimestamp;
+
+  // Auto-refetch when scheduled time is reached to obtain the full paper with pdfUrl
+  useEffect(() => {
+    if (paper && isScheduled && !paper.isAvailable && now >= availableTimestamp) {
+      fetchPaper();
+    }
+  }, [now, availableTimestamp, isScheduled, paper]);
+
   function handleAttemptClick() {
+    if (!isAvailable) {
+      setError(`This question paper is scheduled and will open on ${formatDateTime(paper.availableAt)}.`);
+      return;
+    }
     if (!user) {
       navigate(`/login?next=/papers/${id}`);
       return;
@@ -53,6 +96,9 @@ export default function PaperDetailPage() {
       <PublicLayout>
         <section className="page-band">
           <p className="error">{error}</p>
+          <div style={{ marginTop: '1rem' }}>
+            <Link to="/papers" className="btn ghost">← Back to question papers</Link>
+          </div>
         </section>
       </PublicLayout>
     );
@@ -62,7 +108,7 @@ export default function PaperDetailPage() {
     return (
       <PublicLayout>
         <section className="page-band">
-          <p className="muted">Loading…</p>
+          <p className="muted">Loading paper details…</p>
         </section>
       </PublicLayout>
     );
@@ -134,15 +180,44 @@ export default function PaperDetailPage() {
           </div>
         )}
 
+        {/* ── Breadcrumb / Group navigation ───────────────────────────────── */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <Link to="/papers" className="muted" style={{ fontSize: '0.9rem', textDecoration: 'none' }}>
+            ← All Question Papers
+          </Link>
+          {paper.groupId && paper.groupName && (
+            <Link to={`/groups/${paper.groupId}`} style={{ fontSize: '0.9rem', marginLeft: '0.5rem', color: '#4f46e5', textDecoration: 'none', fontWeight: 600 }}>
+              / {paper.groupName} {paper.scheduleNumber ? `· Schedule ${paper.scheduleNumber}` : ''}
+            </Link>
+          )}
+          {!paper.groupId && paper.groupName && (
+            <span className="muted" style={{ fontSize: '0.9rem', marginLeft: '0.5rem' }}>
+              / {paper.groupName} {paper.scheduleNumber ? `· Schedule ${paper.scheduleNumber}` : ''}
+            </span>
+          )}
+        </div>
+
         {/* ── Paper Detail ───────────────────────────────────────────────── */}
         <div className="detail-layout-single">
-          <div className="meta">
+          <div className="meta" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span>{paper.caLevel}</span>
-            <span>{paper.paperType}</span>
+            <span>Subject Type: {paper.paperType}</span>
             <span>{paper.subjectName}</span>
+            {paper.scheduleNumber && (
+              <span className="pill info" style={{ alignSelf: 'center' }}>
+                Schedule {paper.scheduleNumber}
+              </span>
+            )}
           </div>
+
           <h1>{paper.title}</h1>
-          <p className="lede">{paper.description}</p>
+          {paper.groupName && (
+            <p style={{ color: '#4f46e5', fontWeight: 600, margin: '0.25rem 0 0.5rem' }}>
+              Part of {paper.groupName}
+            </p>
+          )}
+          {paper.description && <p className="lede">{paper.description}</p>}
+
           <div className="stat-row">
             <div>
               <strong>{paper.totalMarks}</strong>
@@ -152,15 +227,67 @@ export default function PaperDetailPage() {
               <strong>{paper.durationMinutes}</strong>
               <span>Minutes</span>
             </div>
+            {isScheduled && (
+              <div>
+                <strong style={{ fontSize: '1rem', color: isAvailable ? '#15803d' : '#b45309' }}>
+                  {isAvailable ? 'Open' : formatDateTime(paper.availableAt)}
+                </strong>
+                <span>{isAvailable ? 'Availability' : 'Scheduled Open Time'}</span>
+              </div>
+            )}
           </div>
+
+          {/* ── Scheduled Access Notice ── */}
+          {!isAvailable && (
+            <div
+              className="panel"
+              style={{
+                background: '#fffbeb',
+                border: '1px solid #fde68a',
+                borderRadius: '12px',
+                padding: '1.25rem',
+                margin: '1.5rem 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+              }}
+            >
+              <div style={{ fontSize: '2rem' }}>🔒</div>
+              <div>
+                <strong style={{ color: '#92400e', fontSize: '1.05rem', display: 'block' }}>
+                  Paper Scheduled &ndash; Access Locked
+                </strong>
+                <p style={{ margin: '0.25rem 0 0', color: '#b45309', fontSize: '0.9rem' }}>
+                  This question paper is scheduled and will automatically become available on{' '}
+                  <strong>{formatDateTime(paper.availableAt)}</strong>. You cannot open, view, or attempt it before this time.
+                </p>
+              </div>
+            </div>
+          )}
+
           {error && <p className="error">{error}</p>}
-          <div className="cta-row">
-            <button className="btn primary lg" onClick={handleAttemptClick} disabled={busy}>
-              {busy ? 'Starting…' : 'Attempt this paper'}
-            </button>
+
+          <div className="cta-row" style={{ marginTop: '1.5rem' }}>
+            {isAvailable ? (
+              <button className="btn primary lg" onClick={handleAttemptClick} disabled={busy}>
+                {busy ? 'Starting…' : 'Attempt this paper'}
+              </button>
+            ) : (
+              <button
+                className="btn ghost lg"
+                disabled
+                style={{
+                  opacity: 0.7,
+                  cursor: 'not-allowed',
+                  border: '1px solid #d1d5db',
+                  background: '#f3f4f6',
+                  color: '#4b5563',
+                }}
+              >
+                🔒 Available on {formatDateTime(paper.availableAt)}
+              </button>
+            )}
           </div>
-
-
         </div>
       </section>
     </PublicLayout>

@@ -253,6 +253,115 @@ export const dbService = {
   },
 
 
+  // QUESTION PAPER GROUPS
+  async getQuestionPaperGroups() {
+    const { data, error } = await supabase.from('question_paper_groups').select('*').order('createdAt', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async getQuestionPaperGroupById(id) {
+    const { data, error } = await supabase.from('question_paper_groups').select('*').eq('id', id).maybeSingle();
+    if (error) throw new Error(error.message);
+    return data || null;
+  },
+
+  async createQuestionPaperGroup(group) {
+    const { error } = await supabase.from('question_paper_groups').insert(group);
+    if (error) throw new Error(error.message);
+    return group;
+  },
+
+  async updateQuestionPaperGroup(id, updates) {
+    const now = new Date().toISOString();
+    const payload = { ...updates, updatedAt: now };
+    const { data, error } = await supabase
+      .from('question_paper_groups')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data || null;
+  },
+
+  async deleteQuestionPaperGroup(id) {
+    // First, unlink any papers in this group
+    await supabase.from('question_papers').update({ groupId: null, scheduleNumber: null }).eq('groupId', id);
+    const { error } = await supabase.from('question_paper_groups').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
+
+  async getQuestionPapersByGroup(groupId) {
+    const { data, error } = await supabase.from('question_papers').select('*').eq('groupId', groupId).order('scheduleNumber', { ascending: true });
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  // QUESTION PAPER SCHEDULES (Shared date/time per schedule)
+  async getSchedulesByGroup(groupId) {
+    try {
+      const { data, error } = await supabase
+        .from('question_paper_schedules')
+        .select('*')
+        .eq('groupId', groupId)
+        .order('scheduleNumber', { ascending: true });
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async getAllSchedules() {
+    try {
+      const { data, error } = await supabase
+        .from('question_paper_schedules')
+        .select('*');
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
+  },
+
+  async setScheduleAvailableAt(groupId, scheduleNumber, availableAt) {
+    const schedNum = Number(scheduleNumber);
+    const now = new Date().toISOString();
+    const id = `${groupId}-sched-${schedNum}`;
+
+    try {
+      await supabase
+        .from('question_paper_schedules')
+        .upsert(
+          {
+            id,
+            groupId,
+            scheduleNumber: schedNum,
+            availableAt: availableAt || null,
+            updatedAt: now,
+          },
+          { onConflict: 'groupId,scheduleNumber' }
+        );
+    } catch {
+      // Ignore if table does not exist yet
+    }
+
+    // Always synchronize availableAt onto all papers inside this schedule
+    try {
+      await supabase
+        .from('question_papers')
+        .update({ availableAt: availableAt || null })
+        .eq('groupId', groupId)
+        .eq('scheduleNumber', schedNum);
+    } catch {
+      // Ignore if column does not exist
+    }
+
+    return { groupId, scheduleNumber: schedNum, availableAt };
+  },
+
   // CONTACT MESSAGES
   async createContactMessage(entry) {
     const { error } = await supabase.from('contact_messages').insert(entry);
