@@ -224,23 +224,8 @@ export default function GroupDetailPage() {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
             <div style={{ maxWidth: '750px' }}>
-              <span
-                style={{
-                  background: '#ede9fe',
-                  color: '#6d28d9',
-                  fontWeight: 700,
-                  fontSize: '0.78rem',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  padding: '0.25rem 0.65rem',
-                  borderRadius: '6px',
-                  display: 'inline-block',
-                  marginBottom: '0.5rem',
-                }}
-              >
-                Question Paper Group
-              </span>
-              <h1 style={{ margin: 0, fontSize: '2.1rem', fontWeight: 800, color: '#0f172a' }}>
+
+              <h1 style={{ margin: 0, fontSize: '2.1rem', fontWeight: 800, color: '#0a0a0aff' }}>
                 {group.name}
               </h1>
 
@@ -249,7 +234,7 @@ export default function GroupDetailPage() {
                 style={{
                   fontSize: '1.05rem',
                   fontWeight: 600,
-                  color: '#4f46e5',
+                  color: '#545363ff',
                   marginTop: '0.4rem',
                   letterSpacing: '-0.01em',
                 }}
@@ -319,50 +304,7 @@ export default function GroupDetailPage() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '10px',
-                  padding: '0.65rem 1rem',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a' }}>
-                  {group.numSchedules}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>Total Schedules</div>
-              </div>
 
-              <div
-                style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: '10px',
-                  padding: '0.65rem 1rem',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#16a34a' }}>
-                  {publishedSchedulesCount}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 600 }}>Published</div>
-              </div>
-
-              <div
-                style={{
-                  background: '#eef2ff',
-                  border: '1px solid #c7d2fe',
-                  borderRadius: '10px',
-                  padding: '0.65rem 1rem',
-                  textAlign: 'center',
-                }}
-              >
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#4f46e5' }}>
-                  {totalPapersCount}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#4338ca', fontWeight: 600 }}>Total Papers</div>
-              </div>
             </div>
           </div>
         </div>
@@ -372,9 +314,7 @@ export default function GroupDetailPage() {
           <h2 style={{ margin: 0, fontSize: '1.35rem', color: '#1e293b' }}>
             Schedules &amp; Question Papers
           </h2>
-          <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
-            Schedules with published question papers are highlighted in bright colors. Schedules pending paper uploads are dimmed and locked.
-          </p>
+
         </div>
 
         {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
@@ -415,7 +355,7 @@ export default function GroupDetailPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
                       <span
                         style={{
-                          background: '#4f46e5',
+                          background: '#08071cff',
                           color: '#ffffff',
                           fontWeight: 800,
                           fontSize: '0.9rem',
@@ -475,15 +415,6 @@ export default function GroupDetailPage() {
                   {/* Uploaded Question Papers Table */}
                   <div style={{ padding: '1rem 1.5rem', overflowX: 'auto' }}>
                     <table className="data-table" style={{ background: '#ffffff', width: '100%' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ color: '#4338ca' }}>Subject</th>
-                          <th style={{ color: '#4338ca' }}>Question Paper Title</th>
-                          <th style={{ color: '#4338ca' }}>Subject Type</th>
-                          <th style={{ color: '#4338ca' }}>Marks &amp; Duration</th>
-                          <th style={{ textAlign: 'right', color: '#4338ca' }}>Action</th>
-                        </tr>
-                      </thead>
                       <tbody>
                         {papers.map((p) => (
                           <tr key={p.id}>
@@ -513,7 +444,7 @@ export default function GroupDetailPage() {
                                 className="pill"
                                 style={{
                                   background: '#ede9fe',
-                                  color: '#6d28d9',
+                                  color: '#000000ff',
                                   fontWeight: 600,
                                   fontSize: '0.75rem',
                                   border: '1px solid #ddd6fe',
@@ -536,7 +467,7 @@ export default function GroupDetailPage() {
                                   style={{
                                     fontSize: '0.88rem',
                                     padding: '0.45rem 1.1rem',
-                                    background: '#4f46e5',
+                                    background: '#14123aff',
                                     fontWeight: 700,
                                     boxShadow: '0 2px 8px rgba(79, 70, 229, 0.3)',
                                   }}
@@ -558,7 +489,7 @@ export default function GroupDetailPage() {
                                   }}
                                   title={`Opens on ${formatScheduleDateTime(s.availableAt)}`}
                                 >
-                                  🔒 Locked
+                                  Locked
                                 </button>
                               )}
                             </td>
@@ -636,11 +567,9 @@ export default function GroupDetailPage() {
                 {/* Dim Body with Disabled Notice */}
                 <div style={{ padding: '1.25rem 1.5rem', textAlign: 'center', color: '#94a3b8' }}>
                   <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500 }}>
-                    Question papers for Schedule {s.scheduleNumber} have not been uploaded by the admin yet.
+                    Question papers for Schedule {s.scheduleNumber} have not been uploaded  yet.
                   </p>
-                  <span style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'block', marginTop: '0.3rem' }}>
-                    This schedule cannot be clicked or attempted until question papers are published.
-                  </span>
+
                 </div>
               </div>
             );

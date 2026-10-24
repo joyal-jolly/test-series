@@ -162,11 +162,13 @@ export default function PapersPage() {
                         {/* Details of the schedule directly under group title name */}
                         <div
                           style={{
-                            marginTop: '0.4rem',
-                            fontSize: '0.86rem',
-                            fontWeight: 600,
-                            color: '#4f46e5',
-                            letterSpacing: '-0.01em',
+                            marginTop: '0.3rem',
+                            fontSize: '0.66rem',
+                            fontWeight: 500,
+                            color: '#94a3b8',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
                           }}
                         >
                           {g.numSchedules} Schedules · {expectedSubjects} Subjects per Schedule
@@ -213,8 +215,7 @@ export default function PapersPage() {
                             height: '32px',
                             borderRadius: '50%',
                             background: '#dcfce7',
-                            border: '1.5px solid #86efac',
-                            color: '#15803d',
+                            color: '#1aa34dff',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
@@ -262,7 +263,7 @@ export default function PapersPage() {
                     <div
                       style={{
                         width: '100%',
-                        background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
+                        background: 'linear-gradient(135deg, #110e4aff, #4c4c4eff)',
                         color: '#ffffff',
                         borderRadius: '10px',
                         padding: '0.58rem 1rem',
