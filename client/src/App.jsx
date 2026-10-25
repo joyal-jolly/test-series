@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import AboutPage from './pages/AboutPage';
@@ -19,6 +20,7 @@ import {
   AdminPapers,
   AdminSubmissions,
   AdminUsers,
+  AdminInsights,
 } from './pages/AdminPages';
 import {
   ReviewerAssignments,
@@ -29,8 +31,9 @@ import {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/about" element={<AboutPage />} />
@@ -103,6 +106,14 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/admin/insights"
+            element={
+              <ProtectedRoute roles={['admin']}>
+                <AdminInsights />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/reviewer"
@@ -133,7 +144,8 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

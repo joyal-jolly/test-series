@@ -237,7 +237,7 @@ router.post('/assignments/:id/upload-annotated', (req, res, next) => {
 
 router.post('/assignments/:id/evaluate', async (req, res, next) => {
   try {
-    const { feedback, questionMarks: rawMarks } = req.body || {};
+    const { feedback, questionMarks: rawMarks, totalMarksOverride } = req.body || {};
     const submission = await dbService.getSubmissionById(req.params.id);
     if (!submission || submission.assignedReviewerId !== req.user.id) {
       return res.status(404).json({ error: 'Assignment not found' });
@@ -253,7 +253,10 @@ router.post('/assignments/:id/evaluate', async (req, res, next) => {
       : (paper?.questions || []).map((q) => ({ questionId: q.id, marksAwarded: 0, feedback: '' }));
 
     const now = new Date().toISOString();
-    const totalMarks = questionMarks.reduce((sum, qm) => sum + Number(qm.marksAwarded || 0), 0);
+    // Use totalMarksOverride if the reviewer entered a direct total; otherwise sum per-question
+    const totalMarks = totalMarksOverride != null
+      ? Number(totalMarksOverride)
+      : questionMarks.reduce((sum, qm) => sum + Number(qm.marksAwarded || 0), 0);
 
     const evaluationId = uuid();
     const evaluation = {
@@ -295,5 +298,6 @@ router.post('/assignments/:id/evaluate', async (req, res, next) => {
     next(err);
   }
 });
+
 
 export default router;

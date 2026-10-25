@@ -94,6 +94,7 @@ router.get('/users', async (req, res, next) => {
         email: u.email,
         role: u.role,
         status: u.status,
+        phone: u.profile?.phone || '',
         profile: u.profile,
         createdAt: u.createdAt,
       })),
@@ -105,9 +106,9 @@ router.get('/users', async (req, res, next) => {
 
 router.post('/users', async (req, res, next) => {
   try {
-    const { name, email, password, role, profile } = req.body || {};
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({ error: 'name, email, password, and role are required' });
+    const { name, email, password, role, profile, phone } = req.body || {};
+    if (!name || !email || !role) {
+      return res.status(400).json({ error: 'name, email, and role are required' });
     }
     if (!['student', 'reviewer', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'Invalid role' });
@@ -119,15 +120,24 @@ router.post('/users', async (req, res, next) => {
       return res.status(409).json({ error: 'Email already exists' });
     }
 
+    // Auto-generate password from name if not provided
+    const rawPassword = password || `${name.trim().split(' ')[0].toLowerCase()}@123`;
+
     const now = new Date().toISOString();
+    const userProfile = {
+      ...(profile || {}),
+      ...(phone ? { phone: phone.trim() } : {}),
+      ...(role === 'reviewer' ? { qualification: 'CA' } : {}),
+    };
+
     const user = {
       id: uuid(),
       name: name.trim(),
       email: normalized,
-      passwordHash: hashPassword(password),
+      passwordHash: hashPassword(rawPassword),
       role,
       status: 'active',
-      profile: profile || {},
+      profile: userProfile,
       createdAt: now,
       updatedAt: now,
     };
@@ -140,7 +150,56 @@ router.post('/users', async (req, res, next) => {
         email: user.email,
         role: user.role,
         status: user.status,
+        phone: userProfile.phone || '',
         profile: user.profile,
+      },
+      generatedPassword: !password ? rawPassword : undefined,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/users/:id', async (req, res, next) => {
+  try {
+    const user = await dbService.getUserById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const updates = { updatedAt: new Date().toISOString() };
+
+    if (req.body.name !== undefined) updates.name = req.body.name.trim();
+    if (req.body.role !== undefined) {
+      if (!['student', 'reviewer', 'admin'].includes(req.body.role)) {
+        return res.status(400).json({ error: 'Invalid role' });
+      }
+      // Prevent removing the last admin
+      if (user.role === 'admin' && req.body.role !== 'admin') {
+        const admins = await dbService.getUsers('admin');
+        if (admins.length <= 1) {
+          return res.status(400).json({ error: 'Cannot change role of the last admin account' });
+        }
+      }
+      updates.role = req.body.role;
+    }
+    if (req.body.phone !== undefined) {
+      updates.profile = { ...(user.profile || {}), phone: req.body.phone.trim() };
+    }
+    if (req.body.password) {
+      updates.passwordHash = hashPassword(req.body.password);
+    }
+
+    const updated = await dbService.updateUser
+      ? await dbService.updateUser(req.params.id, updates)
+      : await dbService.updateUserStatus(req.params.id, updates.status || user.status, updates);
+
+    res.json({
+      user: {
+        id: req.params.id,
+        name: updates.name || user.name,
+        email: user.email,
+        role: updates.role || user.role,
+        phone: updates.profile?.phone ?? (user.profile?.phone || ''),
+        profile: updates.profile || user.profile,
       },
     });
   } catch (err) {
@@ -187,6 +246,8 @@ router.delete('/users/:id', async (req, res, next) => {
     next(err);
   }
 });
+
+
 
 // ─── Question Paper Groups ──────────────────────────────────────────────
 
@@ -651,4 +712,88 @@ router.post('/assign', async (req, res, next) => {
   }
 });
 
+// ─── Insights: Groups with per-paper student results ────────────────────────
+router.get('/insights', async (_req, res, next) => {
+  try {
+    const [groups, allPapers, subjects, allSchedules, submissions, users, evaluations] = await Promise.all([
+      dbService.getQuestionPaperGroups(),
+      dbService.getQuestionPapers(),
+      dbService.getSubjects(),
+      dbService.getAllSchedules(),
+      dbService.getSubmissions(),
+      dbService.getUsers(),
+      dbService.getEvaluations(),
+    ]);
+
+    const enrichedGroups = groups.map((g) => {
+      const groupPapers = allPapers.filter((p) => p.groupId === g.id);
+      const groupSchedules = allSchedules.filter((s) => s.groupId === g.id);
+      const maxSubjects = g.numSubjectsPerSchedule || 3;
+
+      const schedules = [];
+      for (let i = 1; i <= g.numSchedules; i++) {
+        const schedRecord = groupSchedules.find((s) => s.scheduleNumber === i);
+        const schedPapers = groupPapers
+          .filter((p) => p.scheduleNumber === i)
+          .map((paper) => {
+            const subject = subjects.find((s) => s.id === paper.subjectId);
+
+            // Find all submissions for this paper
+            const paperSubmissions = submissions.filter((s) => s.questionPaperId === paper.id);
+            const studentResults = paperSubmissions.map((sub) => {
+              const student = users.find((u) => u.id === sub.studentId);
+              const evaluation = evaluations.find((e) => e.submissionId === sub.id);
+              return {
+                submissionId: sub.id,
+                studentId: sub.studentId,
+                studentName: student?.name || 'Unknown',
+                studentEmail: student?.email || '',
+                status: sub.status,
+                submittedAt: sub.submittedAt,
+                marksAwarded: evaluation?.totalMarks ?? null,
+                totalMarks: paper.totalMarks,
+                evaluatedAt: evaluation?.evaluatedAt || null,
+              };
+            });
+
+            return {
+              id: paper.id,
+              title: paper.title,
+              subjectName: subject?.name || 'Unknown',
+              caLevel: paper.caLevel,
+              paperType: paper.paperType,
+              totalMarks: paper.totalMarks,
+              pdfUrl: paper.pdfUrl,
+              studentResults,
+              attemptCount: studentResults.length,
+              evaluatedCount: studentResults.filter((r) => r.marksAwarded != null).length,
+            };
+          });
+
+        const availableAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+        schedules.push({
+          scheduleNumber: i,
+          availableAt,
+          papers: schedPapers,
+        });
+      }
+
+      return {
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        numSchedules: g.numSchedules,
+        numSubjectsPerSchedule: maxSubjects,
+        schedules,
+        totalPapers: groupPapers.length,
+      };
+    });
+
+    res.json({ groups: enrichedGroups });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
+

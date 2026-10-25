@@ -1,9 +1,11 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 export function PublicLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   function portalPath() {
     if (!user) return '/login';
@@ -28,12 +30,20 @@ export function PublicLayout({ children }) {
           <NavLink to="/">Home</NavLink>
           <NavLink to="/papers">Question Papers</NavLink>
           <NavLink to="/about">About Campus</NavLink>
-          <NavLink to="/contact">Contact & Admissions</NavLink>
+          <NavLink to="/contact">Contact &amp; Admissions</NavLink>
           <a href="https://mentauraca.info/" target="_blank" rel="noreferrer" className="nav-external">
             Official Website ↗
           </a>
         </nav>
         <div className="top-actions">
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle dark mode"
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           {user ? (
             <>
               <button className="btn ghost" onClick={() => navigate(portalPath())}>
@@ -86,7 +96,7 @@ export function PublicLayout({ children }) {
             <Link to="/register">Register Attempt</Link>
           </div>
           <div>
-            <h4>Campus & Info</h4>
+            <h4>Campus &amp; Info</h4>
             <Link to="/about">About Mentaura</Link>
             <Link to="/contact">Contact Campus</Link>
             <a href="https://mentauraca.info/" target="_blank" rel="noreferrer">
@@ -102,6 +112,7 @@ export function PublicLayout({ children }) {
 export function PortalLayout({ title, links, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <div className="portal-shell">
@@ -129,15 +140,25 @@ export function PortalLayout({ title, links, children }) {
         </nav>
         <div className="sidebar-foot">
           <p>{user?.name}</p>
-          <button
-            className="btn subtle"
-            onClick={() => {
-              logout();
-              navigate('/');
-            }}
-          >
-            Logout
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              className="theme-toggle"
+              onClick={toggleTheme}
+              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle dark mode"
+            >
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button
+              className="btn subtle"
+              onClick={() => {
+                logout();
+                navigate('/');
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </aside>
       <div className="portal-main">

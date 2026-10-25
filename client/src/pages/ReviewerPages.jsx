@@ -156,12 +156,14 @@ export function ReviewSubmissionPage() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [feedback, setFeedback] = useState('');
+  const [marksAwarded, setMarksAwarded] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftMsg, setDraftMsg] = useState(null); // { ok: bool, text: string }
   const [lastSavedAt, setLastSavedAt] = useState(null);
   const [exportStatus, setExportStatus] = useState(''); // '' | 'exporting' | 'uploading'
+
 
   // Ref to the answer PDFAnnotator so we can call exportAnnotatedPdf() / getAnnotations() / loadAnnotations()
   const answerAnnotatorRef = useRef(null);
@@ -185,6 +187,12 @@ export function ReviewSubmissionPage() {
           d.assignment?.draftFeedback ||
           '';
         setFeedback(savedFeedback);
+        // Restore marks from evaluation or draft
+        if (d.evaluation?.totalMarks != null) {
+          setMarksAwarded(String(d.evaluation.totalMarks));
+        } else if (d.assignment?.draftMarks != null) {
+          setMarksAwarded(String(d.assignment.draftMarks));
+        }
         if (d.assignment?.draftSavedAt && !d.evaluation) {
           setLastSavedAt(new Date(d.assignment.draftSavedAt));
         }
@@ -225,7 +233,7 @@ export function ReviewSubmissionPage() {
       const draftAnnotations = answerAnnotatorRef.current?.getAnnotations?.() ?? null;
       const result = await api(`/api/reviewer/assignments/${id}/draft`, {
         method: 'PATCH',
-        body: { feedback, draftAnnotations },
+        body: { feedback, draftAnnotations, draftMarks: marksAwarded !== '' ? Number(marksAwarded) : null },
       });
       const saved = new Date(result.savedAt);
       setLastSavedAt(saved);
@@ -267,15 +275,25 @@ export function ReviewSubmissionPage() {
     }
 
     try {
-      // Per-question marks UI is removed; auto-generate 0-mark entries for backend
-      const questionMarks = (data.assignment.questions || []).map((q) => ({
-        questionId: q.id,
-        marksAwarded: 0,
-        feedback: '',
-      }));
+      // Build questionMarks: distribute entered total marks evenly across questions,
+      // or use 0 if no marks entered
+      const totalEntered = marksAwarded !== '' ? Number(marksAwarded) : 0;
+      const questions = data.assignment.questions || [];
+      let questionMarks;
+      if (questions.length > 0) {
+        const base = Math.floor(totalEntered / questions.length);
+        const rem = totalEntered - base * (questions.length - 1);
+        questionMarks = questions.map((q, i) => ({
+          questionId: q.id,
+          marksAwarded: i === questions.length - 1 ? rem : base,
+          feedback: '',
+        }));
+      } else {
+        questionMarks = [{ questionId: 'overall', marksAwarded: totalEntered, feedback: '' }];
+      }
       await api(`/api/reviewer/assignments/${id}/evaluate`, {
         method: 'POST',
-        body: { feedback, questionMarks, annotatedPdfUrl },
+        body: { feedback, questionMarks, annotatedPdfUrl, totalMarksOverride: totalEntered },
       });
       navigate('/reviewer/assignments');
     } catch (err) {
@@ -422,10 +440,36 @@ export function ReviewSubmissionPage() {
             )}
 
             <form className="form rev-eval-form" onSubmit={submit}>
+              <label className="rev-marks-label">
+                <span className="rev-marks-label-text">Marks Awarded</span>
+                <div className="rev-marks-input-wrap">
+                  <input
+                    type="number"
+                    min="0"
+                    max={data?.assignment?.totalMarks || 9999}
+                    step="0.5"
+                    disabled={completed}
+                    value={marksAwarded}
+                    placeholder="e.g. 72"
+                    onChange={(e) => setMarksAwarded(e.target.value)}
+                    className="rev-marks-input"
+                  />
+                  {data?.assignment?.totalMarks && (
+                    <span className="rev-marks-max">/ {data.assignment.totalMarks}</span>
+                  )}
+                </div>
+                {completed && data?.evaluation?.totalMarks != null && (
+                  <span className="rev-marks-scored">
+                    Score: <strong>{data.evaluation.totalMarks}</strong>
+                    {data?.assignment?.totalMarks ? ` / ${data.assignment.totalMarks}` : ''}
+                  </span>
+                )}
+              </label>
+
               <label>
                 Overall feedback
                 <textarea
-                  rows={8}
+                  rows={7}
                   disabled={completed}
                   value={feedback}
                   placeholder="Write your feedback to the student… (optional)"

@@ -17,7 +17,7 @@ export function AdminPortalLayout({ children, unassignedCount }) {
             setPendingCount(d.pendingAssignments);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [unassignedCount]);
 
@@ -30,6 +30,7 @@ export function AdminPortalLayout({ children, unassignedCount }) {
       badge: pendingCount > 0 ? pendingCount : null,
     },
     { to: '/admin/users', label: 'Users' },
+    { to: '/admin/insights', label: 'Insights' },
   ];
 
   return (
@@ -145,7 +146,7 @@ function scheduleStatusPill(sched) {
 export function AdminPapers() {
   const [groups, setGroups] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [expandedGroup, setExpandedGroup] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Create group form
@@ -474,195 +475,238 @@ export function AdminPapers() {
           <p className="muted">No question paper groups yet. Create a group to start organizing question papers.</p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           {groups.map((g) => {
-            const isExpanded = expandedGroup === g.id;
             const expectedSubjects = g.numSubjectsPerSchedule || 3;
+            const totalExpected = g.totalExpectedPapers || (g.numSchedules * expectedSubjects);
+            const totalUploaded = g.totalUploadedPapers || 0;
+            const progress = totalExpected > 0 ? Math.round((totalUploaded / totalExpected) * 100) : 0;
 
             return (
-              <div key={g.id} className="panel group-panel" style={{ padding: '1.25rem 1.5rem', borderRadius: '12px' }}>
-                {/* Group Header */}
-                <div
-                  className="group-header"
-                  onClick={() => setExpandedGroup(isExpanded ? null : g.id)}
-                  style={{
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    userSelect: 'none',
-                  }}
-                >
-                  <div>
-                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '1.2rem' }}>
-                      <span style={{ fontSize: '0.85rem', transition: 'transform 0.2s', display: 'inline-block', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>
-                        ▶
-                      </span>
-                      {g.name}
-                    </h3>
-                    {g.description && <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.85rem' }}>{g.description}</p>}
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
-                    <span className="pill info" style={{ fontSize: '0.8rem' }}>
-                      {g.numSchedules} Schedules · {expectedSubjects} Subjects/Schedule
-                    </span>
-                    <span className="pill published" style={{ fontSize: '0.8rem' }}>
-                      {g.totalUploadedPapers || 0} / {g.totalExpectedPapers || (g.numSchedules * expectedSubjects)} Papers
-                    </span>
-                    <button
-                      type="button"
-                      className="btn subtle"
-                      onClick={(e) => { e.stopPropagation(); setEditingGroup({ ...g }); }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="btn subtle danger"
-                      onClick={(e) => { e.stopPropagation(); deleteGroup(g.id); }}
-                    >
-                      Delete
-                    </button>
+              <div
+                key={g.id}
+                className="panel group-panel"
+                onClick={() => setSelectedGroup(g)}
+                style={{
+                  padding: '1.1rem 1.4rem',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  transition: 'box-shadow 0.18s, transform 0.18s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.13)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.transform = ''; }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    {g.name}
+                  </h3>
+                  {g.description && <p className="muted" style={{ margin: '0.2rem 0 0.5rem', fontSize: '0.83rem' }}>{g.description}</p>}
+                  {/* Progress bar */}
+                  <div style={{ marginTop: '0.45rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{ flex: 1, height: '5px', borderRadius: '99px', background: '#e5e7eb', overflow: 'hidden' }}>
+                      <div style={{ width: `${progress}%`, height: '100%', borderRadius: '99px', background: progress === 100 ? '#22c55e' : '#000000ff', transition: 'width 0.4s' }} />
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: '#6b7280', whiteSpace: 'nowrap' }}>{totalUploaded}/{totalExpected} papers</span>
                   </div>
                 </div>
-
-                {/* Schedules Under this Group */}
-                {isExpanded && (
-                  <div style={{ marginTop: '1.25rem', borderTop: '1px solid var(--border, #eee)', paddingTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    {g.schedules.map((sched) => {
-                      const papers = sched.papers || [];
-                      const canAddMore = papers.length < expectedSubjects;
-
-                      return (
-                        <div
-                          key={sched.scheduleNumber}
-                          style={{
-                            border: '1px solid var(--border, #e5e7eb)',
-                            borderRadius: '10px',
-                            background: '#fafafa',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          {/* Schedule Bar */}
-                          <div
-                            style={{
-                              padding: '0.85rem 1.25rem',
-                              background: '#f3f4f6',
-                              borderBottom: '1px solid var(--border, #e5e7eb)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              flexWrap: 'wrap',
-                              gap: '0.75rem',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                              <strong style={{ fontSize: '1rem' }}>Schedule {sched.scheduleNumber}</strong>
-                              <span className={`pill ${papers.length >= expectedSubjects ? 'published' : papers.length > 0 ? 'assigned' : 'draft'}`} style={{ fontSize: '0.78rem' }}>
-                                {papers.length} / {expectedSubjects} Subjects Uploaded
-                              </span>
-                            </div>
-
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
-                                <span className="muted">Scheduled Access:</span>
-                                <strong>{formatScheduleDate(sched.availableAt)}</strong>
-                                <button
-                                  type="button"
-                                  className="btn subtle"
-                                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                                  onClick={() => openScheduleDateModal(g.id, g.name, sched.scheduleNumber, sched.availableAt)}
-                                >
-                                  {sched.availableAt ? 'Change Date/Time' : 'Set Date/Time'}
-                                </button>
-                              </div>
-
-                              {canAddMore && (
-                                <button
-                                  type="button"
-                                  className="btn primary"
-                                  style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
-                                  onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, null, sched.availableAt, papers)}
-                                >
-                                  + Upload Subject Paper ({papers.length + 1}/{expectedSubjects})
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Subject Papers in this Schedule */}
-                          <div style={{ padding: '0.75rem 1.25rem' }}>
-                            {papers.length === 0 ? (
-                              <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem' }}>
-                                No subject question papers uploaded yet. Click <strong>&quot;+ Upload Subject Paper&quot;</strong> to upload papers for up to {expectedSubjects} subjects.
-                              </div>
-                            ) : (
-                              <table className="data-table" style={{ background: '#fff', borderRadius: '6px' }}>
-                                <thead>
-                                  <tr>
-                                    <th style={{ width: '14rem' }}>Subject</th>
-                                    <th>Paper Title</th>
-                                    <th>Subject Type</th>
-                                    <th>Marks &amp; Duration</th>
-                                    <th style={{ textAlign: 'right' }}>Actions</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {papers.map((p) => (
-                                    <tr key={p.id}>
-                                      <td>
-                                        <strong style={{ fontSize: '0.92rem' }}>{p.subjectName}</strong>
-                                        <div className="muted" style={{ fontSize: '0.78rem' }}>{p.caLevel}</div>
-                                      </td>
-                                      <td>
-                                        <span style={{ fontWeight: 500 }}>{p.title}</span>
-                                        {p.chapter && <div className="muted" style={{ fontSize: '0.78rem' }}>{p.chapter}</div>}
-                                      </td>
-                                      <td>
-                                        <span className="pill info" style={{ fontSize: '0.75rem' }}>{p.paperType}</span>
-                                      </td>
-                                      <td>
-                                        <span style={{ fontSize: '0.85rem' }}>{p.totalMarks} marks · {p.durationMinutes} min</span>
-                                      </td>
-                                      <td style={{ textAlign: 'right' }}>
-                                        <div className="table-actions" style={{ justifyContent: 'flex-end' }}>
-                                          <button
-                                            type="button"
-                                            className="btn subtle"
-                                            onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, p, sched.availableAt, papers)}
-                                          >
-                                            Edit
-                                          </button>
-                                          {p.pdfUrl && (
-                                            <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="btn subtle">
-                                              PDF
-                                            </a>
-                                          )}
-                                          <button
-                                            type="button"
-                                            className="btn subtle danger"
-                                            onClick={() => deletePaper(p.id)}
-                                          >
-                                            Remove
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+                  <span className="pill info" style={{ fontSize: '0.78rem' }}>
+                    {g.numSchedules} Schedules
+                  </span>
+                  <button
+                    type="button"
+                    className="btn subtle"
+                    onClick={(e) => { e.stopPropagation(); setEditingGroup({ ...g }); }}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="btn subtle danger"
+                    onClick={(e) => { e.stopPropagation(); deleteGroup(g.id); }}
+                  >
+                    Delete
+                  </button>
+                  <span style={{ fontSize: '1rem', color: '#9ca3af' }}>›</span>
+                </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {/* ── Group Schedules Popup Modal ── */}
+      {selectedGroup && (() => {
+        const g = groups.find((x) => x.id === selectedGroup.id) || selectedGroup;
+        const expectedSubjects = g.numSubjectsPerSchedule || 3;
+        return (
+          <div
+            className="modal-backdrop"
+            onClick={() => setSelectedGroup(null)}
+            style={{ alignItems: 'flex-start', paddingTop: '3vh' }}
+          >
+            <div
+              className="modal-card"
+              onClick={(e) => e.stopPropagation()}
+              style={{ maxWidth: '860px', width: '96%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
+            >
+              {/* Modal Header */}
+              <div className="modal-head" style={{ flexShrink: 0 }}>
+                <div>
+                  <h2 style={{ margin: 0 }}> {g.name}</h2>
+                  {g.description && <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.85rem' }}>{g.description}</p>}
+                </div>
+                <button
+                  type="button"
+                  className="btn subtle"
+                  onClick={() => setSelectedGroup(null)}
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: '50%', flexShrink: 0 }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Scrollable schedules list */}
+              <div style={{ overflowY: 'auto', flex: 1, padding: '1rem 1.5rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {(g.schedules || []).map((sched) => {
+                  const papers = sched.papers || [];
+                  const canAddMore = papers.length < expectedSubjects;
+                  const isUploaded = papers.length > 0;
+                  return (
+                    <div
+                      key={sched.scheduleNumber}
+                      style={{
+                        border: isUploaded ? '1.5px dashed var(--border, #d1d5db)' : '1px solid #000000ff',
+                        borderLeft: isUploaded ? '4px solid #9ca3af' : '4px solid #000000ff',
+                        borderRadius: '10px',
+                        background: isUploaded ? '#f5f5f7' : '#fafafa',
+                        overflow: 'hidden',
+                        opacity: isUploaded ? 0.55 : 1,
+                        transition: 'opacity 0.2s, border-color 0.2s',
+                      }}
+                    >
+                      {/* Schedule Bar */}
+                      <div
+                        style={{
+                          padding: '0.85rem 1.25rem',
+                          background: '#f3f4f6',
+                          borderBottom: '1px solid var(--border, #e5e7eb)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '0.75rem',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <strong style={{ fontSize: '1rem' }}>Schedule {sched.scheduleNumber}</strong>
+                          <span className={`pill ${papers.length >= expectedSubjects ? 'published' : papers.length > 0 ? 'assigned' : 'draft'}`} style={{ fontSize: '0.78rem' }}>
+                            {papers.length} / {expectedSubjects} Subjects Uploaded
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                            <span className="muted">Scheduled Access:</span>
+                            <strong>{formatScheduleDate(sched.availableAt)}</strong>
+                            <button
+                              type="button"
+                              className="btn subtle"
+                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                              onClick={() => openScheduleDateModal(g.id, g.name, sched.scheduleNumber, sched.availableAt)}
+                            >
+                              {sched.availableAt ? 'Change Date/Time' : 'Set Date/Time'}
+                            </button>
+                          </div>
+
+                          {canAddMore && (
+                            <button
+                              type="button"
+                              className="btn primary"
+                              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                              onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, null, sched.availableAt, papers)}
+                            >
+                              + Upload Subject Paper ({papers.length + 1}/{expectedSubjects})
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Subject Papers in this Schedule */}
+                      <div style={{ padding: '0.75rem 1.25rem' }}>
+                        {papers.length === 0 ? (
+                          <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem' }}>
+                            No subject question papers uploaded yet. Click <strong>&quot;+ Upload Subject Paper&quot;</strong> to upload papers for up to {expectedSubjects} subjects.
+                          </div>
+                        ) : (
+                          <table className="data-table" style={{ background: '#fff', borderRadius: '6px' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: '14rem' }}>Subject</th>
+                                <th>Paper Title</th>
+                                <th>Subject Type</th>
+                                <th>Marks &amp; Duration</th>
+                                <th style={{ textAlign: 'right' }}>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {papers.map((p) => (
+                                <tr key={p.id}>
+                                  <td>
+                                    <strong style={{ fontSize: '0.92rem' }}>{p.subjectName}</strong>
+                                    <div className="muted" style={{ fontSize: '0.78rem' }}>{p.caLevel}</div>
+                                  </td>
+                                  <td>
+                                    <span style={{ fontWeight: 500 }}>{p.title}</span>
+                                    {p.chapter && <div className="muted" style={{ fontSize: '0.78rem' }}>{p.chapter}</div>}
+                                  </td>
+                                  <td>
+                                    <span className="pill info" style={{ fontSize: '0.75rem' }}>{p.paperType}</span>
+                                  </td>
+                                  <td>
+                                    <span style={{ fontSize: '0.85rem' }}>{p.totalMarks} marks · {p.durationMinutes} min</span>
+                                  </td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    <div className="table-actions" style={{ justifyContent: 'flex-end' }}>
+                                      <button
+                                        type="button"
+                                        className="btn subtle"
+                                        onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, p, sched.availableAt, papers)}
+                                      >
+                                        Edit
+                                      </button>
+                                      {p.pdfUrl && (
+                                        <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="btn subtle">
+                                          PDF
+                                        </a>
+                                      )}
+                                      <button
+                                        type="button"
+                                        className="btn subtle danger"
+                                        onClick={() => deletePaper(p.id)}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Schedule Date/Time Modal ── */}
       {scheduleDateModal && (
@@ -1035,130 +1079,197 @@ export function AdminSubmissions() {
 
 export function AdminUsers() {
   const [users, setUsers] = useState([]);
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    password: '',
-    role: 'reviewer',
-  });
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [activeRole, setActiveRole] = useState('student');
+  const [loading, setLoading] = useState(true);
+
+  // Add User modal
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ name: '', email: '', phone: '', role: 'student' });
+  const [addError, setAddError] = useState('');
+  const [addBusy, setAddBusy] = useState(false);
+  const [generatedPwd, setGeneratedPwd] = useState('');
+
+  // Edit User modal
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', role: '' });
+  const [editError, setEditError] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+
+  // Global status/error
+  const [toast, setToast] = useState(null); // { ok: bool, text: string }
+
+  function showToast(ok, text) {
+    setToast({ ok, text });
+    setTimeout(() => setToast(null), 4000);
+  }
 
   function reload() {
-    api('/api/admin/users').then((d) => setUsers(d.users));
+    setLoading(true);
+    api('/api/admin/users')
+      .then((d) => { setUsers(d.users || []); setLoading(false); })
+      .catch(() => setLoading(false));
   }
 
-  useEffect(() => {
-    reload();
-  }, []);
+  useEffect(() => { reload(); }, []);
 
+  const roleTabs = [
+    { key: 'student', label: 'Students' },
+    { key: 'reviewer', label: 'Reviewers' },
+    { key: 'admin', label: 'Admins' },
+  ];
+
+  const filtered = users.filter((u) => u.role === activeRole);
+
+  // ── Add User ──
   async function createUser(e) {
     e.preventDefault();
-    setError('');
-    setMessage('');
+    setAddError('');
+    setAddBusy(true);
+    setGeneratedPwd('');
     try {
-      await api('/api/admin/users', {
+      const res = await api('/api/admin/users', {
         method: 'POST',
         body: {
-          name: form.name,
-          email: form.email,
-          password: form.password,
-          role: form.role,
-          profile:
-            form.role === 'reviewer'
-              ? { qualification: 'CA' }
-              : {},
+          name: addForm.name,
+          email: addForm.email,
+          phone: addForm.phone,
+          role: addForm.role,
         },
       });
-      setMessage('User created.');
-      setForm({ name: '', email: '', password: '', role: 'reviewer' });
+      if (res.generatedPassword) setGeneratedPwd(res.generatedPassword);
       reload();
+      setAddForm({ name: '', email: '', phone: '', role: 'student' });
+      if (!res.generatedPassword) {
+        setShowAddModal(false);
+        showToast(true, 'User created successfully.');
+      }
     } catch (err) {
-      setError(err.message);
+      setAddError(err.message);
+    } finally {
+      setAddBusy(false);
     }
   }
 
-  async function deleteUser(u) {
-    if (!window.confirm(`Are you sure you want to delete ${u.name} (${u.email})? This action cannot be undone.`)) {
-      return;
+  // ── Edit User ──
+  function openEdit(u) {
+    setEditUser(u);
+    setEditForm({ name: u.name, phone: u.phone || '', role: u.role });
+    setEditError('');
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    setEditError('');
+    setEditBusy(true);
+    try {
+      await api(`/api/admin/users/${editUser.id}`, {
+        method: 'PATCH',
+        body: { name: editForm.name, phone: editForm.phone, role: editForm.role },
+      });
+      setEditUser(null);
+      reload();
+      showToast(true, 'User updated.');
+    } catch (err) {
+      setEditError(err.message);
+    } finally {
+      setEditBusy(false);
     }
-    setError('');
-    setMessage('');
+  }
+
+  // ── Delete User ──
+  async function deleteUser(u) {
+    if (!window.confirm(`Delete ${u.name}? This cannot be undone.`)) return;
     try {
       await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
-      setMessage(`User "${u.name}" deleted.`);
       reload();
+      showToast(true, `"${u.name}" deleted.`);
     } catch (err) {
-      setError(err.message);
+      showToast(false, err.message);
     }
   }
 
   return (
     <AdminPortalLayout>
-      <div className="split-admin">
-        <form className="panel form" onSubmit={createUser}>
-          <h2>Add user</h2>
-          <label>
-            Name
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          </label>
-          <label>
-            Email
-            <input
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Role
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option value="reviewer">Reviewer</option>
-              <option value="student">Student</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
-          {error && <p className="error">{error}</p>}
-          {message && <p className="success">{message}</p>}
-          <button className="btn primary">Create</button>
-        </form>
-        <div className="panel">
-          <h2>Users</h2>
+      {/* ── Top bar ── */}
+      <div className="panel-head" style={{ marginBottom: '1.25rem' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Users</h2>
+          <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+            Manage all users. Select a role tab to filter.
+          </p>
+        </div>
+        <button className="btn primary" onClick={() => { setShowAddModal(true); setAddError(''); setGeneratedPwd(''); }}>
+          + Add User
+        </button>
+      </div>
+
+      {/* ── Role Tabs ── */}
+      <div className="users-role-tabs">
+        {roleTabs.map((t) => {
+          const count = users.filter((u) => u.role === t.key).length;
+          return (
+            <button
+              key={t.key}
+              className={`users-role-tab${activeRole === t.key ? ' active' : ''}`}
+              onClick={() => setActiveRole(t.key)}
+            >
+              {t.label}
+              <span className="users-role-count">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Toast ── */}
+      {toast && (
+        <div className={`users-toast ${toast.ok ? 'ok' : 'err'}`}>
+          {toast.ok ? '✓' : '✕'} {toast.text}
+        </div>
+      )}
+
+      {/* ── Users Table ── */}
+      <div className="panel" style={{ marginTop: '1rem' }}>
+        {loading ? (
+          <p className="muted">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p className="muted" style={{ textAlign: 'center', padding: '2.5rem' }}>
+            No {activeRole}s found.
+          </p>
+        ) : (
           <table className="data-table">
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Actions</th>
+                <th>Phone</th>
+                <th style={{ textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {filtered.map((u) => (
                 <tr key={u.id}>
-                  <td>{u.name}</td>
-                  <td>{u.email}</td>
-                  <td>{u.role}</td>
-                  <td>{u.status}</td>
                   <td>
-                    <div className="table-actions">
+                    <strong>{u.name}</strong>
+                  </td>
+                  <td className="muted" style={{ fontSize: '0.88rem' }}>{u.email}</td>
+                  <td className="muted" style={{ fontSize: '0.88rem' }}>{u.phone || '—'}</td>
+                  <td>
+                    <div className="table-actions" style={{ justifyContent: 'center', gap: '0.35rem' }}>
                       <button
                         type="button"
-                        className="btn subtle danger"
+                        className="icon-action-btn edit"
+                        title="Edit user"
+                        onClick={() => openEdit(u)}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-action-btn delete"
+                        title="Delete user"
                         onClick={() => deleteUser(u)}
                       >
-                        Delete
+                        🗑️
                       </button>
                     </div>
                   </td>
@@ -1166,8 +1277,435 @@ export function AdminUsers() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* ── Add User Modal ── */}
+      {showAddModal && (
+        <div className="modal-backdrop" onClick={() => { if (!addBusy) { setShowAddModal(false); setGeneratedPwd(''); } }}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-head">
+              <h2>Add New User</h2>
+              <button
+                type="button"
+                className="btn subtle"
+                style={{ borderRadius: '50%', padding: '0.35rem 0.65rem' }}
+                onClick={() => { setShowAddModal(false); setGeneratedPwd(''); }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {generatedPwd ? (
+              /* ── Success: show generated password ── */
+              <div>
+                <div className="success-box" style={{ marginBottom: '1rem' }}>
+                  <p style={{ margin: '0 0 0.5rem', fontWeight: 700 }}>✓ User created successfully!</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                    Share this auto-generated password with the user:
+                  </p>
+                </div>
+                <div className="gen-pwd-box">
+                  <code className="gen-pwd-text">{generatedPwd}</code>
+                  <button
+                    type="button"
+                    className="btn subtle"
+                    style={{ fontSize: '0.8rem', padding: '0.3rem 0.65rem' }}
+                    onClick={() => navigator.clipboard.writeText(generatedPwd)}
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="muted" style={{ fontSize: '0.82rem', marginTop: '0.5rem' }}>
+                  The user can change this password after logging in.
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+                  <button className="btn ghost" onClick={() => { setGeneratedPwd(''); }}>
+                    Add Another
+                  </button>
+                  <button className="btn primary" onClick={() => { setShowAddModal(false); setGeneratedPwd(''); }}>
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form className="form" onSubmit={createUser}>
+                <label>
+                  Full Name
+                  <input
+                    value={addForm.name}
+                    onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                    placeholder="e.g. Arjun Menon"
+                    required
+                  />
+                </label>
+                <label>
+                  Email Address
+                  <input
+                    type="email"
+                    value={addForm.email}
+                    onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
+                    placeholder="e.g. arjun@example.com"
+                    required
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  Phone Number
+                  <input
+                    type="tel"
+                    value={addForm.phone}
+                    onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
+                    placeholder="e.g. +91 9876543210"
+                  />
+                </label>
+                <label>
+                  Role
+                  <select value={addForm.role} onChange={(e) => setAddForm({ ...addForm, role: e.target.value })}>
+                    <option value="student">Student</option>
+                    <option value="reviewer">Reviewer</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+                <p className="muted" style={{ fontSize: '0.82rem', margin: '-0.25rem 0 0' }}>
+                  A password will be auto-generated from the user's name and shown after creation.
+                </p>
+                {addError && <p className="error">{addError}</p>}
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                  <button type="button" className="btn ghost" onClick={() => setShowAddModal(false)}>Cancel</button>
+                  <button type="submit" className="btn primary" disabled={addBusy}>
+                    {addBusy ? 'Creating…' : 'Create User'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit User Modal ── */}
+      {editUser && (
+        <div className="modal-backdrop" onClick={() => { if (!editBusy) setEditUser(null); }}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-head">
+              <h2>Edit User</h2>
+              <button
+                type="button"
+                className="btn subtle"
+                style={{ borderRadius: '50%', padding: '0.35rem 0.65rem' }}
+                onClick={() => setEditUser(null)}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="muted" style={{ margin: '0 0 1rem', fontSize: '0.88rem' }}>
+              {editUser.email}
+            </p>
+            <form className="form" onSubmit={saveEdit}>
+              <label>
+                Full Name
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Phone Number
+                <input
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  placeholder="e.g. +91 9876543210"
+                />
+              </label>
+              <label>
+                Role
+                <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>
+                  <option value="student">Student</option>
+                  <option value="reviewer">Reviewer</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              {editError && <p className="error">{editError}</p>}
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn ghost" onClick={() => setEditUser(null)}>Cancel</button>
+                <button type="submit" className="btn primary" disabled={editBusy}>
+                  {editBusy ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </AdminPortalLayout>
+  );
+}
+
+
+// ─── Admin Insights ────────────────────────────────────────────────────────────
+export function AdminInsights() {
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedPaper, setSelectedPaper] = useState(null);
+
+  useEffect(() => {
+    api('/api/admin/insights')
+      .then((d) => {
+        setGroups(d.groups || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  // Drill-down: single paper results
+  if (selectedPaper) {
+    const results = selectedPaper.studentResults || [];
+    const evaluated = results.filter((r) => r.marksAwarded != null);
+    const avgMark = evaluated.length
+      ? Math.round((evaluated.reduce((s, r) => s + r.marksAwarded, 0) / evaluated.length) * 10) / 10
+      : null;
+    const highest = evaluated.length ? Math.max(...evaluated.map((r) => r.marksAwarded)) : null;
+    const lowest = evaluated.length ? Math.min(...evaluated.map((r) => r.marksAwarded)) : null;
+
+    return (
+      <AdminPortalLayout>
+        <div style={{ marginBottom: '1rem' }}>
+          <button className="btn ghost" style={{ marginRight: '0.5rem' }} onClick={() => setSelectedPaper(null)}>
+            ← Back to {selectedGroup?.name}
+          </button>
+        </div>
+
+        <div className="panel" style={{ marginBottom: '1.25rem' }}>
+          <div className="panel-head" style={{ marginBottom: '0.75rem' }}>
+            <div>
+              <h2 style={{ margin: 0 }}>{selectedPaper.title}</h2>
+              <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+                {selectedPaper.subjectName} · {selectedPaper.caLevel} · {selectedPaper.paperType} · {selectedPaper.totalMarks} marks
+              </p>
+            </div>
+            {selectedPaper.pdfUrl && (
+              <a href={selectedPaper.pdfUrl} target="_blank" rel="noreferrer" className="btn ghost">
+                View PDF
+              </a>
+            )}
+          </div>
+
+          {/* Summary stats */}
+          <div className="stats-grid" style={{ marginBottom: '1rem' }}>
+            {[
+              ['Attempts', results.length],
+              ['Evaluated', evaluated.length],
+              ['Avg Score', avgMark != null ? `${avgMark} / ${selectedPaper.totalMarks}` : '—'],
+              ['Highest', highest != null ? `${highest} / ${selectedPaper.totalMarks}` : '—'],
+              ['Lowest', lowest != null ? `${lowest} / ${selectedPaper.totalMarks}` : '—'],
+            ].map(([label, val]) => (
+              <div className="stat-tile" key={label}>
+                <strong style={{ fontSize: '1.35rem' }}>{val}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+
+          {results.length === 0 ? (
+            <p className="muted" style={{ textAlign: 'center', padding: '2rem' }}>No students have attempted this paper yet.</p>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Student</th>
+                  <th>Email</th>
+                  <th>Submitted</th>
+                  <th>Status</th>
+                  <th>Score</th>
+                  <th>Evaluated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results
+                  .sort((a, b) => {
+                    if (b.marksAwarded != null && a.marksAwarded != null) return b.marksAwarded - a.marksAwarded;
+                    if (b.marksAwarded != null) return 1;
+                    if (a.marksAwarded != null) return -1;
+                    return 0;
+                  })
+                  .map((r) => {
+                    const pct = r.marksAwarded != null && r.totalMarks
+                      ? Math.round((r.marksAwarded / r.totalMarks) * 100)
+                      : null;
+                    return (
+                      <tr key={r.submissionId}>
+                        <td><strong>{r.studentName}</strong></td>
+                        <td className="muted" style={{ fontSize: '0.85rem' }}>{r.studentEmail}</td>
+                        <td style={{ fontSize: '0.85rem' }}>
+                          {r.submittedAt ? new Date(r.submittedAt).toLocaleString() : '—'}
+                        </td>
+                        <td>
+                          <span className={`pill ${r.status}`}>{r.status.replace('_', ' ')}</span>
+                        </td>
+                        <td>
+                          {r.marksAwarded != null ? (
+                            <span style={{ fontWeight: 700, color: pct >= 60 ? 'var(--ok)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)' }}>
+                              {r.marksAwarded} / {r.totalMarks}
+                              <span className="muted" style={{ fontWeight: 400, fontSize: '0.8rem', marginLeft: '0.35rem' }}>({pct}%)</span>
+                            </span>
+                          ) : (
+                            <span className="muted">Pending</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '0.82rem' }} className="muted">
+                          {r.evaluatedAt ? new Date(r.evaluatedAt).toLocaleDateString() : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </AdminPortalLayout>
+    );
+  }
+
+  // Drill-down: single group schedules & papers
+  if (selectedGroup) {
+    const allPapers = selectedGroup.schedules.flatMap((s) => s.papers);
+    const totalAttempts = allPapers.reduce((sum, p) => sum + (p.attemptCount || 0), 0);
+    const totalEvaluated = allPapers.reduce((sum, p) => sum + (p.evaluatedCount || 0), 0);
+
+    return (
+      <AdminPortalLayout>
+        <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button className="btn ghost" onClick={() => setSelectedGroup(null)}>← All Groups</button>
+          <h2 style={{ margin: 0 }}>{selectedGroup.name}</h2>
+          {selectedGroup.description && <span className="muted" style={{ fontSize: '0.9rem' }}>{selectedGroup.description}</span>}
+        </div>
+
+        <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
+          {[
+            ['Question Papers', selectedGroup.totalPapers],
+            ['Total Attempts', totalAttempts],
+            ['Evaluated', totalEvaluated],
+          ].map(([label, val]) => (
+            <div className="stat-tile" key={label}>
+              <strong style={{ fontSize: '1.5rem' }}>{val}</strong>
+              <span>{label}</span>
+            </div>
+          ))}
+        </div>
+
+        {selectedGroup.schedules.map((sched) => (
+          sched.papers.length > 0 && (
+            <div key={sched.scheduleNumber} className="panel" style={{ marginBottom: '1.25rem' }}>
+              <div className="panel-head">
+                <h3 style={{ margin: 0 }}>Schedule {sched.scheduleNumber}</h3>
+                {sched.availableAt && (
+                  <span className="muted" style={{ fontSize: '0.85rem' }}>
+                    Available: {new Date(sched.availableAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <div className="insights-paper-grid">
+                {sched.papers.map((paper) => {
+                  const evaluated = (paper.studentResults || []).filter((r) => r.marksAwarded != null);
+                  const avg = evaluated.length
+                    ? Math.round((evaluated.reduce((s, r) => s + r.marksAwarded, 0) / evaluated.length) * 10) / 10
+                    : null;
+                  return (
+                    <button
+                      key={paper.id}
+                      className="insights-paper-card"
+                      onClick={() => setSelectedPaper(paper)}
+                    >
+                      <div className="insights-paper-subject">{paper.subjectName}</div>
+                      <div className="insights-paper-title">{paper.title}</div>
+                      <div className="insights-paper-meta">
+                        <span className="pill info" style={{ fontSize: '0.73rem' }}>{paper.paperType}</span>
+                        <span className="muted" style={{ fontSize: '0.8rem' }}>{paper.totalMarks} marks</span>
+                      </div>
+                      <div className="insights-paper-stats">
+                        <div>
+                          <span className="insights-stat-num">{paper.attemptCount}</span>
+                          <span className="insights-stat-label">Attempts</span>
+                        </div>
+                        <div>
+                          <span className="insights-stat-num">{paper.evaluatedCount}</span>
+                          <span className="insights-stat-label">Evaluated</span>
+                        </div>
+                        <div>
+                          <span className="insights-stat-num">{avg != null ? avg : '—'}</span>
+                          <span className="insights-stat-label">Avg Score</span>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )
+        ))}
+
+        {selectedGroup.schedules.every((s) => s.papers.length === 0) && (
+          <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
+            <p className="muted">No question papers uploaded in this group yet.</p>
+          </div>
+        )}
+      </AdminPortalLayout>
+    );
+  }
+
+  // Top-level: all groups
+  return (
+    <AdminPortalLayout>
+      <div className="panel-head" style={{ marginBottom: '1.25rem' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Insights</h2>
+          <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+            Click a group to see student results and scores per question paper.
+          </p>
         </div>
       </div>
+
+      {loading ? (
+        <p className="muted">Loading…</p>
+      ) : groups.length === 0 ? (
+        <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p className="muted">No question paper groups found. Create a group first from Question Papers.</p>
+        </div>
+      ) : (
+        <div className="insights-groups-grid">
+          {groups.map((g) => {
+            const allPapers = g.schedules.flatMap((s) => s.papers);
+            const totalAttempts = allPapers.reduce((sum, p) => sum + (p.attemptCount || 0), 0);
+            const totalEvaluated = allPapers.reduce((sum, p) => sum + (p.evaluatedCount || 0), 0);
+            return (
+              <button
+                key={g.id}
+                className="insights-group-card"
+                onClick={() => setSelectedGroup(g)}
+              >
+                <h3 className="insights-group-name">{g.name}</h3>
+                {g.description && <p className="insights-group-desc">{g.description}</p>}
+                <div className="insights-group-stats">
+                  <div>
+                    <span className="insights-stat-num">{g.totalPapers}</span>
+                    <span className="insights-stat-label">Papers</span>
+                  </div>
+                  <div>
+                    <span className="insights-stat-num">{totalAttempts}</span>
+                    <span className="insights-stat-label">Attempts</span>
+                  </div>
+                  <div>
+                    <span className="insights-stat-num">{totalEvaluated}</span>
+                    <span className="insights-stat-label">Evaluated</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </AdminPortalLayout>
   );
 }
