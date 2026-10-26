@@ -712,6 +712,89 @@ router.post('/assign', async (req, res, next) => {
   }
 });
 
+// ─── Insights: Student score-card for a specific group ──────────────────────
+router.get('/insights/groups/:groupId/students/:studentId', async (req, res, next) => {
+  try {
+    const { groupId, studentId } = req.params;
+
+    const [group, student, groupPapers, subjects, groupSchedules, studentSubmissions] = await Promise.all([
+      dbService.getQuestionPaperGroupById(groupId),
+      dbService.getUserById(studentId),
+      dbService.getQuestionPapersByGroup(groupId),
+      dbService.getSubjects(),
+      dbService.getSchedulesByGroup(groupId),
+      dbService.getSubmissionsByStudent(studentId),
+    ]);
+
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    // Targeted fetch of evaluations only for this student's submissions
+    const submissionIds = studentSubmissions.map((s) => s.id);
+    const evaluations = await dbService.getEvaluationsBySubmissionIds(submissionIds);
+
+    // O(1) Lookup Maps
+    const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+    const submissionMap = new Map(studentSubmissions.map((s) => [s.questionPaperId, s]));
+    const evalMap = new Map(evaluations.map((e) => [e.submissionId, e]));
+    const schedMap = new Map(groupSchedules.map((s) => [s.scheduleNumber, s]));
+
+    const schedules = [];
+    for (let i = 1; i <= group.numSchedules; i++) {
+      const schedRecord = schedMap.get(i);
+      const schedPapers = groupPapers
+        .filter((p) => p.scheduleNumber === i)
+        .map((paper) => {
+          const subject = subjectMap.get(paper.subjectId);
+          const submission = submissionMap.get(paper.id);
+          const evaluation = submission ? evalMap.get(submission.id) : null;
+
+          return {
+            paperId: paper.id,
+            title: paper.title,
+            subjectName: subject?.name || 'Unknown',
+            caLevel: paper.caLevel,
+            paperType: paper.paperType,
+            totalMarks: paper.totalMarks,
+            pdfUrl: paper.pdfUrl,
+            submissionId: submission?.id || null,
+            status: submission?.status || 'not_attempted',
+            submittedAt: submission?.submittedAt || null,
+            answerFileUrl: submission?.answerFileUrl || null,
+            marksAwarded: evaluation?.totalMarks ?? null,
+            evaluatedAt: evaluation?.evaluatedAt || null,
+            feedback: evaluation?.feedback || null,
+          };
+        });
+
+      const availableAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+
+      schedules.push({
+        scheduleNumber: i,
+        availableAt,
+        papers: schedPapers,
+      });
+    }
+
+    res.json({
+      student: {
+        id: student.id,
+        name: student.name,
+        email: student.email,
+        phone: student.profile?.phone || '',
+      },
+      group: {
+        id: group.id,
+        name: group.name,
+        description: group.description,
+      },
+      schedules,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Insights: Groups with per-paper student results ────────────────────────
 router.get('/insights', async (_req, res, next) => {
   try {
@@ -725,24 +808,63 @@ router.get('/insights', async (_req, res, next) => {
       dbService.getEvaluations(),
     ]);
 
+    // O(1) Lookup Maps
+    const userMap = new Map(users.map((u) => [u.id, u]));
+    const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+    const evalMap = new Map(evaluations.map((e) => [e.submissionId, e]));
+
+    // Pre-group submissions by questionPaperId
+    const submissionsByPaper = new Map();
+    for (const sub of submissions) {
+      const list = submissionsByPaper.get(sub.questionPaperId);
+      if (list) {
+        list.push(sub);
+      } else {
+        submissionsByPaper.set(sub.questionPaperId, [sub]);
+      }
+    }
+
+    // Pre-group papers by groupId
+    const papersByGroup = new Map();
+    for (const paper of allPapers) {
+      if (!paper.groupId) continue;
+      const list = papersByGroup.get(paper.groupId);
+      if (list) {
+        list.push(paper);
+      } else {
+        papersByGroup.set(paper.groupId, [paper]);
+      }
+    }
+
+    // Pre-group schedules by groupId
+    const schedulesByGroup = new Map();
+    for (const sched of allSchedules) {
+      const list = schedulesByGroup.get(sched.groupId);
+      if (list) {
+        list.push(sched);
+      } else {
+        schedulesByGroup.set(sched.groupId, [sched]);
+      }
+    }
+
     const enrichedGroups = groups.map((g) => {
-      const groupPapers = allPapers.filter((p) => p.groupId === g.id);
-      const groupSchedules = allSchedules.filter((s) => s.groupId === g.id);
+      const groupPapers = papersByGroup.get(g.id) || [];
+      const groupSchedules = schedulesByGroup.get(g.id) || [];
+      const schedMap = new Map(groupSchedules.map((s) => [s.scheduleNumber, s]));
       const maxSubjects = g.numSubjectsPerSchedule || 3;
 
       const schedules = [];
       for (let i = 1; i <= g.numSchedules; i++) {
-        const schedRecord = groupSchedules.find((s) => s.scheduleNumber === i);
+        const schedRecord = schedMap.get(i);
         const schedPapers = groupPapers
           .filter((p) => p.scheduleNumber === i)
           .map((paper) => {
-            const subject = subjects.find((s) => s.id === paper.subjectId);
+            const subject = subjectMap.get(paper.subjectId);
+            const paperSubmissions = submissionsByPaper.get(paper.id) || [];
 
-            // Find all submissions for this paper
-            const paperSubmissions = submissions.filter((s) => s.questionPaperId === paper.id);
             const studentResults = paperSubmissions.map((sub) => {
-              const student = users.find((u) => u.id === sub.studentId);
-              const evaluation = evaluations.find((e) => e.submissionId === sub.id);
+              const student = userMap.get(sub.studentId);
+              const evaluation = evalMap.get(sub.id);
               return {
                 submissionId: sub.id,
                 studentId: sub.studentId,
@@ -750,6 +872,7 @@ router.get('/insights', async (_req, res, next) => {
                 studentEmail: student?.email || '',
                 status: sub.status,
                 submittedAt: sub.submittedAt,
+                answerFileUrl: sub.answerFileUrl || null,
                 marksAwarded: evaluation?.totalMarks ?? null,
                 totalMarks: paper.totalMarks,
                 evaluatedAt: evaluation?.evaluatedAt || null,

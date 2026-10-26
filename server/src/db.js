@@ -155,6 +155,12 @@ export const dbService = {
     return data || null;
   },
 
+  async getSubmissionsByStudent(studentId) {
+    const { data, error } = await supabase.from('submissions').select('*').eq('studentId', studentId);
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
   async createSubmission(submission, attemptId) {
     const now = new Date().toISOString();
     const [subRes, attRes] = await Promise.all([
@@ -205,6 +211,13 @@ export const dbService = {
   // EVALUATIONS
   async getEvaluations() {
     const { data, error } = await supabase.from('evaluations').select('*');
+    if (error) throw new Error(error.message);
+    return data || [];
+  },
+
+  async getEvaluationsBySubmissionIds(submissionIds) {
+    if (!submissionIds || submissionIds.length === 0) return [];
+    const { data, error } = await supabase.from('evaluations').select('*').in('submissionId', submissionIds);
     if (error) throw new Error(error.message);
     return data || [];
   },

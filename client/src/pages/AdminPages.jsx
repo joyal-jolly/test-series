@@ -1449,6 +1449,8 @@ export function AdminInsights() {
   const [loading, setLoading] = useState(true);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [selectedPaper, setSelectedPaper] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [groupSearch, setGroupSearch] = useState('');
 
   useEffect(() => {
     api('/api/admin/insights')
@@ -1459,7 +1461,18 @@ export function AdminInsights() {
       .catch(() => setLoading(false));
   }, []);
 
-  // Drill-down: single paper results
+  // Drill-down 2a: Student scorecard for a group
+  if (selectedStudent && selectedGroup) {
+    return (
+      <InsightStudentScorecard
+        group={selectedGroup}
+        student={selectedStudent}
+        onBack={() => setSelectedStudent(null)}
+      />
+    );
+  }
+
+  // Drill-down 2b: Single paper results
   if (selectedPaper) {
     const results = selectedPaper.studentResults || [];
     const evaluated = results.filter((r) => r.marksAwarded != null);
@@ -1471,10 +1484,15 @@ export function AdminInsights() {
 
     return (
       <AdminPortalLayout>
-        <div style={{ marginBottom: '1rem' }}>
-          <button className="btn ghost" style={{ marginRight: '0.5rem' }} onClick={() => setSelectedPaper(null)}>
+        <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <button className="btn ghost" onClick={() => setSelectedPaper(null)}>
             ← Back to {selectedGroup?.name}
           </button>
+          {selectedPaper.pdfUrl && (
+            <a href={selectedPaper.pdfUrl} target="_blank" rel="noreferrer" className="btn ghost">
+              View Question Paper PDF ↗
+            </a>
+          )}
         </div>
 
         <div className="panel" style={{ marginBottom: '1.25rem' }}>
@@ -1485,15 +1503,9 @@ export function AdminInsights() {
                 {selectedPaper.subjectName} · {selectedPaper.caLevel} · {selectedPaper.paperType} · {selectedPaper.totalMarks} marks
               </p>
             </div>
-            {selectedPaper.pdfUrl && (
-              <a href={selectedPaper.pdfUrl} target="_blank" rel="noreferrer" className="btn ghost">
-                View PDF
-              </a>
-            )}
           </div>
 
-          {/* Summary stats */}
-          <div className="stats-grid" style={{ marginBottom: '1rem' }}>
+          <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
             {[
               ['Attempts', results.length],
               ['Evaluated', evaluated.length],
@@ -1520,6 +1532,7 @@ export function AdminInsights() {
                   <th>Status</th>
                   <th>Score</th>
                   <th>Evaluated</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1536,7 +1549,24 @@ export function AdminInsights() {
                       : null;
                     return (
                       <tr key={r.submissionId}>
-                        <td><strong>{r.studentName}</strong></td>
+                        <td>
+                          <button
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              color: 'var(--accent, #6366f1)',
+                              textDecoration: 'underline',
+                              fontSize: '0.92rem',
+                            }}
+                            title="View student's full group scorecard"
+                            onClick={() => setSelectedStudent({ id: r.studentId, name: r.studentName, email: r.studentEmail })}
+                          >
+                            {r.studentName}
+                          </button>
+                        </td>
                         <td className="muted" style={{ fontSize: '0.85rem' }}>{r.studentEmail}</td>
                         <td style={{ fontSize: '0.85rem' }}>
                           {r.submittedAt ? new Date(r.submittedAt).toLocaleString() : '—'}
@@ -1551,11 +1581,34 @@ export function AdminInsights() {
                               <span className="muted" style={{ fontWeight: 400, fontSize: '0.8rem', marginLeft: '0.35rem' }}>({pct}%)</span>
                             </span>
                           ) : (
-                            <span className="muted">Pending</span>
+                            <span className="muted">Pending review</span>
                           )}
                         </td>
                         <td style={{ fontSize: '0.82rem' }} className="muted">
                           {r.evaluatedAt ? new Date(r.evaluatedAt).toLocaleDateString() : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            {r.answerFileUrl && (
+                              <a
+                                href={r.answerFileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn ghost"
+                                style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                                title="View uploaded answer file"
+                              >
+                                Answer Sheet ↗
+                              </a>
+                            )}
+                            <button
+                              className="btn subtle"
+                              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                              onClick={() => setSelectedStudent({ id: r.studentId, name: r.studentName, email: r.studentEmail })}
+                            >
+                              Scorecard →
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1568,103 +1621,55 @@ export function AdminInsights() {
     );
   }
 
-  // Drill-down: single group schedules & papers
+  // Drill-down 1: Single group detail
   if (selectedGroup) {
-    const allPapers = selectedGroup.schedules.flatMap((s) => s.papers);
-    const totalAttempts = allPapers.reduce((sum, p) => sum + (p.attemptCount || 0), 0);
-    const totalEvaluated = allPapers.reduce((sum, p) => sum + (p.evaluatedCount || 0), 0);
-
     return (
-      <AdminPortalLayout>
-        <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <button className="btn ghost" onClick={() => setSelectedGroup(null)}>← All Groups</button>
-          <h2 style={{ margin: 0 }}>{selectedGroup.name}</h2>
-          {selectedGroup.description && <span className="muted" style={{ fontSize: '0.9rem' }}>{selectedGroup.description}</span>}
-        </div>
-
-        <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
-          {[
-            ['Question Papers', selectedGroup.totalPapers],
-            ['Total Attempts', totalAttempts],
-            ['Evaluated', totalEvaluated],
-          ].map(([label, val]) => (
-            <div className="stat-tile" key={label}>
-              <strong style={{ fontSize: '1.5rem' }}>{val}</strong>
-              <span>{label}</span>
-            </div>
-          ))}
-        </div>
-
-        {selectedGroup.schedules.map((sched) => (
-          sched.papers.length > 0 && (
-            <div key={sched.scheduleNumber} className="panel" style={{ marginBottom: '1.25rem' }}>
-              <div className="panel-head">
-                <h3 style={{ margin: 0 }}>Schedule {sched.scheduleNumber}</h3>
-                {sched.availableAt && (
-                  <span className="muted" style={{ fontSize: '0.85rem' }}>
-                    Available: {new Date(sched.availableAt).toLocaleString()}
-                  </span>
-                )}
-              </div>
-              <div className="insights-paper-grid">
-                {sched.papers.map((paper) => {
-                  const evaluated = (paper.studentResults || []).filter((r) => r.marksAwarded != null);
-                  const avg = evaluated.length
-                    ? Math.round((evaluated.reduce((s, r) => s + r.marksAwarded, 0) / evaluated.length) * 10) / 10
-                    : null;
-                  return (
-                    <button
-                      key={paper.id}
-                      className="insights-paper-card"
-                      onClick={() => setSelectedPaper(paper)}
-                    >
-                      <div className="insights-paper-subject">{paper.subjectName}</div>
-                      <div className="insights-paper-title">{paper.title}</div>
-                      <div className="insights-paper-meta">
-                        <span className="pill info" style={{ fontSize: '0.73rem' }}>{paper.paperType}</span>
-                        <span className="muted" style={{ fontSize: '0.8rem' }}>{paper.totalMarks} marks</span>
-                      </div>
-                      <div className="insights-paper-stats">
-                        <div>
-                          <span className="insights-stat-num">{paper.attemptCount}</span>
-                          <span className="insights-stat-label">Attempts</span>
-                        </div>
-                        <div>
-                          <span className="insights-stat-num">{paper.evaluatedCount}</span>
-                          <span className="insights-stat-label">Evaluated</span>
-                        </div>
-                        <div>
-                          <span className="insights-stat-num">{avg != null ? avg : '—'}</span>
-                          <span className="insights-stat-label">Avg Score</span>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )
-        ))}
-
-        {selectedGroup.schedules.every((s) => s.papers.length === 0) && (
-          <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
-            <p className="muted">No question papers uploaded in this group yet.</p>
-          </div>
-        )}
-      </AdminPortalLayout>
+      <InsightGroupDetail
+        group={selectedGroup}
+        onBack={() => {
+          setSelectedGroup(null);
+          setSelectedPaper(null);
+          setSelectedStudent(null);
+        }}
+        onSelectPaper={(paper) => setSelectedPaper(paper)}
+        onSelectStudent={(student) => setSelectedStudent(student)}
+      />
     );
   }
+
+  // Filter groups
+  const filteredGroups = groups.filter((g) =>
+    g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
+    (g.description && g.description.toLowerCase().includes(groupSearch.toLowerCase()))
+  );
 
   // Top-level: all groups
   return (
     <AdminPortalLayout>
-      <div className="panel-head" style={{ marginBottom: '1.25rem' }}>
+      <div className="panel-head" style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h2 style={{ margin: 0 }}>Insights</h2>
           <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
-            Click a group to see student results and scores per question paper.
+            Click a group to see students who attempted it and their scheduled paper marks.
           </p>
         </div>
+        {groups.length > 3 && (
+          <input
+            type="search"
+            placeholder="Search groups…"
+            value={groupSearch}
+            onChange={(e) => setGroupSearch(e.target.value)}
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid var(--line)',
+              fontSize: '0.88rem',
+              background: 'var(--panel)',
+              color: 'var(--ink)',
+              minWidth: '220px',
+            }}
+          />
+        )}
       </div>
 
       {loading ? (
@@ -1673,12 +1678,19 @@ export function AdminInsights() {
         <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
           <p className="muted">No question paper groups found. Create a group first from Question Papers.</p>
         </div>
+      ) : filteredGroups.length === 0 ? (
+        <div className="panel" style={{ textAlign: 'center', padding: '2rem' }}>
+          <p className="muted">No groups matching &ldquo;{groupSearch}&rdquo;.</p>
+        </div>
       ) : (
         <div className="insights-groups-grid">
-          {groups.map((g) => {
+          {filteredGroups.map((g) => {
             const allPapers = g.schedules.flatMap((s) => s.papers);
             const totalAttempts = allPapers.reduce((sum, p) => sum + (p.attemptCount || 0), 0);
             const totalEvaluated = allPapers.reduce((sum, p) => sum + (p.evaluatedCount || 0), 0);
+            const uniqueStudents = new Set(
+              allPapers.flatMap((p) => (p.studentResults || []).map((r) => r.studentId))
+            ).size;
             return (
               <button
                 key={g.id}
@@ -1693,6 +1705,10 @@ export function AdminInsights() {
                     <span className="insights-stat-label">Papers</span>
                   </div>
                   <div>
+                    <span className="insights-stat-num">{uniqueStudents}</span>
+                    <span className="insights-stat-label">Students</span>
+                  </div>
+                  <div>
                     <span className="insights-stat-num">{totalAttempts}</span>
                     <span className="insights-stat-label">Attempts</span>
                   </div>
@@ -1705,6 +1721,522 @@ export function AdminInsights() {
             );
           })}
         </div>
+      )}
+    </AdminPortalLayout>
+  );
+}
+
+// ─── InsightGroupDetail: Students tab + Papers tab ────────────────────────────
+function InsightGroupDetail({ group, onBack, onSelectPaper, onSelectStudent }) {
+  const [activeTab, setActiveTab] = useState('students');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [sortBy, setSortBy] = useState('marks'); // 'marks', 'attempts', 'name'
+
+  const allPapers = group.schedules.flatMap((s) => s.papers);
+  const totalAttempts = allPapers.reduce((sum, p) => sum + (p.attemptCount || 0), 0);
+  const totalEvaluated = allPapers.reduce((sum, p) => sum + (p.evaluatedCount || 0), 0);
+
+  // Build unique student list across all papers in this group
+  const studentMap = new Map();
+  for (const paper of allPapers) {
+    for (const r of paper.studentResults || []) {
+      if (!studentMap.has(r.studentId)) {
+        studentMap.set(r.studentId, {
+          id: r.studentId,
+          name: r.studentName,
+          email: r.studentEmail,
+          attempts: 0,
+          evaluated: 0,
+          totalMarksAwarded: 0,
+          totalMaxMarks: 0,
+        });
+      }
+      const entry = studentMap.get(r.studentId);
+      entry.attempts += 1;
+      if (r.marksAwarded != null) {
+        entry.evaluated += 1;
+        entry.totalMarksAwarded += r.marksAwarded;
+        entry.totalMaxMarks += r.totalMarks || 0;
+      }
+    }
+  }
+  const students = [...studentMap.values()];
+
+  // Search & sort students
+  const filteredStudents = students.filter((s) =>
+    s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+    s.email.toLowerCase().includes(studentSearch.toLowerCase())
+  );
+
+  filteredStudents.sort((a, b) => {
+    if (sortBy === 'marks') return b.totalMarksAwarded - a.totalMarksAwarded;
+    if (sortBy === 'attempts') return b.attempts - a.attempts;
+    if (sortBy === 'name') return a.name.localeCompare(b.name);
+    return 0;
+  });
+
+  return (
+    <AdminPortalLayout>
+      <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <button className="btn ghost" onClick={onBack}>← All Groups</button>
+        <h2 style={{ margin: 0 }}>{group.name}</h2>
+        {group.description && <span className="muted" style={{ fontSize: '0.9rem' }}>{group.description}</span>}
+      </div>
+
+      <div className="stats-grid" style={{ marginBottom: '1.25rem' }}>
+        {[
+          ['Question Papers', group.totalPapers],
+          ['Students Attempted', students.length],
+          ['Total Attempts', totalAttempts],
+          ['Evaluated Papers', totalEvaluated],
+        ].map(([label, val]) => (
+          <div className="stat-tile" key={label}>
+            <strong style={{ fontSize: '1.5rem' }}>{val}</strong>
+            <span>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabs */}
+      <div className="users-role-tabs" style={{ marginBottom: '1.25rem' }}>
+        <button
+          className={`users-role-tab${activeTab === 'students' ? ' active' : ''}`}
+          onClick={() => setActiveTab('students')}
+        >
+          Students
+          <span className="users-role-count">{students.length}</span>
+        </button>
+        <button
+          className={`users-role-tab${activeTab === 'papers' ? ' active' : ''}`}
+          onClick={() => setActiveTab('papers')}
+        >
+          Papers
+          <span className="users-role-count">{allPapers.length}</span>
+        </button>
+      </div>
+
+      {/* ── Students Tab ── */}
+      {activeTab === 'students' && (
+        students.length === 0 ? (
+          <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
+            <p className="muted">No students have attempted any paper in this group yet.</p>
+          </div>
+        ) : (
+          <div className="panel">
+            {/* Filter controls */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+              <input
+                type="search"
+                placeholder="Search students by name or email…"
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                style={{
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--line)',
+                  fontSize: '0.88rem',
+                  background: 'var(--panel)',
+                  color: 'var(--ink)',
+                  minWidth: '240px',
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                <span className="muted">Sort by:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    borderRadius: '6px',
+                    border: '1px solid var(--line)',
+                    background: 'var(--panel)',
+                    color: 'var(--ink)',
+                    fontSize: '0.85rem',
+                  }}
+                >
+                  <option value="marks">Highest Marks</option>
+                  <option value="attempts">Most Attempts</option>
+                  <option value="name">Name (A-Z)</option>
+                </select>
+              </div>
+            </div>
+
+            {filteredStudents.length === 0 ? (
+              <p className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
+                No students matching &ldquo;{studentSearch}&rdquo;.
+              </p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '40px' }}>#</th>
+                    <th>Student Name</th>
+                    <th>Email</th>
+                    <th style={{ textAlign: 'center' }}>Papers Attempted</th>
+                    <th style={{ textAlign: 'center' }}>Evaluated</th>
+                    <th style={{ textAlign: 'right' }}>Total Marks</th>
+                    <th style={{ textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredStudents.map((s, idx) => {
+                    const pct = s.totalMaxMarks > 0
+                      ? Math.round((s.totalMarksAwarded / s.totalMaxMarks) * 100)
+                      : null;
+                    return (
+                      <tr key={s.id}>
+                        <td className="muted" style={{ fontSize: '0.85rem' }}>{idx + 1}</td>
+                        <td>
+                          <button
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              padding: 0,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              color: 'var(--accent, #6366f1)',
+                              textDecoration: 'underline',
+                              fontSize: '0.95rem',
+                              textAlign: 'left',
+                            }}
+                            title="Click to view full schedule marks scorecard"
+                            onClick={() => onSelectStudent(s)}
+                          >
+                            {s.name}
+                          </button>
+                        </td>
+                        <td className="muted" style={{ fontSize: '0.85rem' }}>{s.email}</td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className="pill info" style={{ fontSize: '0.78rem' }}>
+                            {s.attempts} / {allPapers.length}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          {s.evaluated > 0 ? (
+                            <span className="pill published" style={{ fontSize: '0.78rem' }}>{s.evaluated}</span>
+                          ) : (
+                            <span className="pill draft" style={{ fontSize: '0.78rem' }}>0</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {s.evaluated > 0 ? (
+                            <span style={{
+                              fontWeight: 700,
+                              color: pct >= 60 ? 'var(--ok)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)',
+                            }}>
+                              {s.totalMarksAwarded} / {s.totalMaxMarks}
+                              <span className="muted" style={{ fontWeight: 400, fontSize: '0.78rem', marginLeft: '0.3rem' }}>
+                                ({pct}%)
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="muted">—</span>
+                          )}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <button
+                            className="btn subtle"
+                            style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}
+                            onClick={() => onSelectStudent(s)}
+                          >
+                            View Scorecard →
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )
+      )}
+
+      {/* ── Papers Tab ── */}
+      {activeTab === 'papers' && (
+        <>
+          {group.schedules.map((sched) => (
+            sched.papers.length > 0 && (
+              <div key={sched.scheduleNumber} className="panel" style={{ marginBottom: '1.25rem' }}>
+                <div className="panel-head">
+                  <h3 style={{ margin: 0 }}>Schedule {sched.scheduleNumber}</h3>
+                  {sched.availableAt && (
+                    <span className="muted" style={{ fontSize: '0.85rem' }}>
+                      Available: {new Date(sched.availableAt).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <div className="insights-paper-grid">
+                  {sched.papers.map((paper) => {
+                    const evalPapers = (paper.studentResults || []).filter((r) => r.marksAwarded != null);
+                    const avg = evalPapers.length
+                      ? Math.round((evalPapers.reduce((s, r) => s + r.marksAwarded, 0) / evalPapers.length) * 10) / 10
+                      : null;
+                    return (
+                      <button
+                        key={paper.id}
+                        className="insights-paper-card"
+                        onClick={() => onSelectPaper(paper)}
+                      >
+                        <div className="insights-paper-subject">{paper.subjectName}</div>
+                        <div className="insights-paper-title">{paper.title}</div>
+                        <div className="insights-paper-meta">
+                          <span className="pill info" style={{ fontSize: '0.73rem' }}>{paper.paperType}</span>
+                          <span className="muted" style={{ fontSize: '0.8rem' }}>{paper.totalMarks} marks</span>
+                        </div>
+                        <div className="insights-paper-stats">
+                          <div>
+                            <span className="insights-stat-num">{paper.attemptCount}</span>
+                            <span className="insights-stat-label">Attempts</span>
+                          </div>
+                          <div>
+                            <span className="insights-stat-num">{paper.evaluatedCount}</span>
+                            <span className="insights-stat-label">Evaluated</span>
+                          </div>
+                          <div>
+                            <span className="insights-stat-num">{avg != null ? avg : '—'}</span>
+                            <span className="insights-stat-label">Avg Score</span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )
+          ))}
+          {group.schedules.every((s) => s.papers.length === 0) && (
+            <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
+              <p className="muted">No question papers uploaded in this group yet.</p>
+            </div>
+          )}
+        </>
+      )}
+    </AdminPortalLayout>
+  );
+}
+
+// ─── InsightStudentScorecard: per-student marks across all scheduled papers ───
+function InsightStudentScorecard({ group, student, onBack }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    api(`/api/admin/insights/groups/${group.id}/students/${student.id}`)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((err) => { setError(err.message || 'Failed to load scorecard.'); setLoading(false); });
+  }, [group.id, student.id]);
+
+  const schedules = data?.schedules || [];
+  const allPaperResults = schedules.flatMap((s) => s.papers);
+  const attempted = allPaperResults.filter((p) => p.status !== 'not_attempted').length;
+  const evaluatedCount = allPaperResults.filter((p) => p.marksAwarded != null).length;
+  const totalMarksAwarded = allPaperResults.reduce((sum, p) => sum + (p.marksAwarded || 0), 0);
+  const totalMaxMarks = allPaperResults
+    .filter((p) => p.marksAwarded != null)
+    .reduce((sum, p) => sum + (p.totalMarks || 0), 0);
+  const overallPct = totalMaxMarks > 0 ? Math.round((totalMarksAwarded / totalMaxMarks) * 100) : null;
+
+  return (
+    <AdminPortalLayout>
+      {/* Top action bar / breadcrumbs */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button className="btn ghost" onClick={onBack}>← Back to {group.name}</button>
+          <span className="muted" style={{ fontSize: '0.9rem' }}>/ {student.name}</span>
+        </div>
+        {!loading && (
+          <button className="btn ghost" onClick={() => window.print()} style={{ fontSize: '0.85rem' }}>
+            🖨️ Print Scorecard
+          </button>
+        )}
+      </div>
+
+      {/* Student Profile & Cumulative Performance */}
+      <div className="panel" style={{ marginBottom: '1.25rem', padding: '1.25rem 1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.35rem' }}>{student.name}</h2>
+            <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+              {student.email} {data?.student?.phone ? `· ${data.student.phone}` : ''}
+            </p>
+          </div>
+          {!loading && overallPct != null && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: '2.4rem',
+                fontWeight: 800,
+                color: overallPct >= 60 ? 'var(--ok)' : overallPct >= 40 ? 'var(--warn)' : 'var(--danger)',
+                lineHeight: 1,
+              }}>
+                {overallPct}%
+              </div>
+              <div className="muted" style={{ fontSize: '0.8rem', marginTop: '0.3rem' }}>
+                {totalMarksAwarded} / {totalMaxMarks} marks (evaluated papers)
+              </div>
+            </div>
+          )}
+        </div>
+
+        {!loading && (
+          <div className="stats-grid" style={{ marginTop: '1rem' }}>
+            {[
+              ['Group Papers', allPaperResults.length],
+              ['Attempted', attempted],
+              ['Evaluated', evaluatedCount],
+              ['Total Score', evaluatedCount > 0 ? `${totalMarksAwarded} / ${totalMaxMarks}` : '—'],
+            ].map(([label, val]) => (
+              <div className="stat-tile" key={label}>
+                <strong style={{ fontSize: '1.2rem' }}>{val}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Detailed Schedule Breakdown */}
+      {loading ? (
+        <p className="muted">Loading scorecard…</p>
+      ) : error ? (
+        <p className="error">{error}</p>
+      ) : (
+        schedules.map((sched) => (
+          sched.papers.length > 0 && (
+            <div key={sched.scheduleNumber} className="panel" style={{ marginBottom: '1.25rem' }}>
+              {/* Schedule header */}
+              <div className="panel-head" style={{ marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <h3 style={{ margin: 0 }}>Schedule {sched.scheduleNumber}</h3>
+                  {(() => {
+                    const schAttempted = sched.papers.filter((p) => p.status !== 'not_attempted').length;
+                    const schEvaluated = sched.papers.filter((p) => p.marksAwarded != null).length;
+                    const schTotal = sched.papers.reduce((sum, p) => sum + (p.marksAwarded || 0), 0);
+                    const schMax = sched.papers.filter((p) => p.marksAwarded != null).reduce((sum, p) => sum + (p.totalMarks || 0), 0);
+                    return (
+                      <>
+                        <span className={`pill ${schAttempted === sched.papers.length ? 'published' : schAttempted > 0 ? 'assigned' : 'draft'}`} style={{ fontSize: '0.75rem' }}>
+                          {schAttempted}/{sched.papers.length} attempted
+                        </span>
+                        {schEvaluated > 0 && (
+                          <span className="pill info" style={{ fontSize: '0.75rem' }}>
+                            {schTotal} / {schMax} marks
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+                {sched.availableAt && (
+                  <span className="muted" style={{ fontSize: '0.82rem' }}>
+                    Available: {new Date(sched.availableAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              {/* Papers table */}
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Subject</th>
+                    <th>Paper</th>
+                    <th style={{ textAlign: 'center' }}>Status</th>
+                    <th>Submitted</th>
+                    <th style={{ textAlign: 'right' }}>Marks Awarded</th>
+                    <th>Evaluated On</th>
+                    <th style={{ textAlign: 'right' }}>Answer Sheet</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sched.papers.map((paper) => {
+                    const pct = paper.marksAwarded != null && paper.totalMarks
+                      ? Math.round((paper.marksAwarded / paper.totalMarks) * 100)
+                      : null;
+                    const statusLabel = paper.status === 'not_attempted'
+                      ? 'Not Attempted'
+                      : paper.status.replace(/_/g, ' ');
+                    const statusClass = paper.status === 'evaluated'
+                      ? 'published'
+                      : ['submitted', 'assigned', 'under_review'].includes(paper.status)
+                        ? 'assigned'
+                        : 'draft';
+
+                    return (
+                      <tr key={paper.paperId}>
+                        <td>
+                          <strong style={{ fontSize: '0.92rem' }}>{paper.subjectName}</strong>
+                          <div className="muted" style={{ fontSize: '0.76rem' }}>{paper.caLevel}</div>
+                        </td>
+                        <td>
+                          <span style={{ fontWeight: 500 }}>{paper.title}</span>
+                          <div className="muted" style={{ fontSize: '0.76rem' }}>{paper.paperType} · {paper.totalMarks} marks</div>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <span className={`pill ${statusClass}`} style={{ fontSize: '0.76rem' }}>
+                            {statusLabel}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.83rem' }} className="muted">
+                          {paper.submittedAt ? new Date(paper.submittedAt).toLocaleString() : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {paper.marksAwarded != null ? (
+                            <span style={{
+                              fontWeight: 700,
+                              fontSize: '1rem',
+                              color: pct >= 60 ? 'var(--ok)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)',
+                            }}>
+                              {paper.marksAwarded}
+                              <span className="muted" style={{ fontWeight: 400, fontSize: '0.8rem' }}> / {paper.totalMarks}</span>
+                              <span className="muted" style={{ fontWeight: 400, fontSize: '0.75rem', marginLeft: '0.3rem' }}>({pct}%)</span>
+                            </span>
+                          ) : paper.status === 'not_attempted' ? (
+                            <span className="muted">—</span>
+                          ) : (
+                            <span className="muted" style={{ fontSize: '0.85rem' }}>Pending review</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '0.82rem' }} className="muted">
+                          {paper.evaluatedAt ? new Date(paper.evaluatedAt).toLocaleDateString() : '—'}
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          {paper.answerFileUrl ? (
+                            <a
+                              href={paper.answerFileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="btn ghost"
+                              style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                            >
+                              View Sheet ↗
+                            </a>
+                          ) : (
+                            <span className="muted" style={{ fontSize: '0.8rem' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {/* Reviewer feedback block */}
+              {sched.papers.some((p) => p.feedback) && (
+                <div style={{ marginTop: '0.85rem', padding: '0.85rem 1.15rem', background: 'var(--accent-soft, #f8fafc)', borderRadius: '10px', border: '1px solid var(--line, #e2e8f0)' }}>
+                  <p style={{ margin: '0 0 0.5rem', fontWeight: 600, fontSize: '0.88rem' }}>Reviewer Remarks &amp; Feedback</p>
+                  {sched.papers.filter((p) => p.feedback).map((p) => (
+                    <div key={p.paperId} style={{ marginBottom: '0.4rem', fontSize: '0.88rem' }}>
+                      <span className="muted" style={{ fontWeight: 600 }}>{p.subjectName} ({p.title}): </span>
+                      <span>{p.feedback}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        ))
       )}
     </AdminPortalLayout>
   );
