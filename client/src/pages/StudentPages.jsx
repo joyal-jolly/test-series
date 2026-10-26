@@ -660,13 +660,40 @@ export function ResultPage() {
       <div className="panel">
         <div className="panel-head">
           <div>
-            <h2>{paper.title}</h2>
-            <p className="muted">Reviewed by {evaluation.reviewerName}</p>
+            {paper.groupName && (
+              <p style={{
+                margin: '0 0 0.25rem',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--accent)',
+              }}>
+                {paper.groupName}
+              </p>
+            )}
+            <h2 style={{ margin: 0 }}>
+              {paper.scheduleNumber != null
+                ? `Schedule ${paper.scheduleNumber} — ${paper.title}`
+                : paper.title}
+            </h2>
+            <p className="muted" style={{ marginTop: '0.25rem' }}>Reviewed by {evaluation.reviewerName}</p>
           </div>
         </div>
         <p>
           <strong>Overall feedback:</strong> {evaluation.feedback || '—'}
         </p>
+        {evaluation.totalMarks != null && (
+          <p>
+            <strong>Marks:</strong>{' '}
+            <span style={{ fontWeight: 700, fontSize: '1.1rem' }}>
+              {evaluation.totalMarks}
+            </span>
+            {paper.totalMarks ? (
+              <span style={{ color: 'var(--ink-soft)' }}> / {paper.totalMarks}</span>
+            ) : null}
+          </p>
+        )}
         {submission?.answerFileUrl && (
           <div className="annotated-pdf-box">
             <span className="annotated-pdf-icon"></span>

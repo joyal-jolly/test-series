@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid';
 import { fileURLToPath } from 'url';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
+import { supabase } from '../supabase.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads', 'answers');
@@ -49,17 +50,76 @@ function enrichAttempt(attempt, papers, submissions, evaluations) {
     submission,
     evaluation: evaluation
       ? {
-          id: evaluation.id,
-          totalMarks: evaluation.totalMarks,
-          feedback: evaluation.feedback,
-          status: evaluation.status,
-          evaluatedAt: evaluation.evaluatedAt,
-        }
+        id: evaluation.id,
+        totalMarks: evaluation.totalMarks,
+        feedback: evaluation.feedback,
+        status: evaluation.status,
+        evaluatedAt: evaluation.evaluatedAt,
+      }
       : null,
   };
 }
 
+// ─── Enrollment endpoints ─────────────────────────────────────────────────────
+
+// GET /api/student/enrollments
+router.get('/enrollments', requireAuth, requireRole('student'), async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('group_enrollments')
+      .select('"groupId"')
+      .eq('"studentId"', req.user.id);
+    if (error) return res.json({ enrolledGroupIds: [] });
+    res.json({ enrolledGroupIds: (data || []).map((r) => r.groupId) });
+  } catch {
+    res.json({ enrolledGroupIds: [] });
+  }
+});
+
+// POST /api/student/enroll/:groupId
+router.post('/enroll/:groupId', requireAuth, requireRole('student'), async (req, res) => {
+  const { groupId } = req.params;
+  try {
+    const group = await dbService.getQuestionPaperGroupById(groupId);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    await supabase.from('group_enrollments').upsert(
+      { id: `${req.user.id}-${groupId}`, studentId: req.user.id, groupId, enrolledAt: new Date().toISOString() },
+      { onConflict: 'id' }
+    );
+    res.json({ ok: true, groupId });
+  } catch {
+    res.json({ ok: true, groupId }); // non-fatal — client uses localStorage
+  }
+});
+
+// GET /api/student/paper-attempts — { [paperId]: { attemptId, status, evaluated } }
+router.get('/paper-attempts', requireAuth, requireRole('student'), async (req, res, next) => {
+  try {
+    const [attempts, submissions, evaluations] = await Promise.all([
+      dbService.getAttempts(),
+      dbService.getSubmissions(),
+      dbService.getEvaluations(),
+    ]);
+    const mine = attempts.filter((a) => a.studentId === req.user.id);
+
+    // Priority: evaluated > under_review > assigned > submitted > in_progress
+    const pri = { evaluated: 5, under_review: 4, assigned: 3, submitted: 2, in_progress: 1 };
+    const sorted = [...mine].sort((a, b) => (pri[a.status] || 0) - (pri[b.status] || 0));
+
+    const result = {};
+    for (const a of sorted) {
+      const sub = submissions.find((s) => s.attemptId === a.id);
+      const ev = sub ? evaluations.find((e) => e.submissionId === sub.id) : null;
+      result[a.questionPaperId] = { attemptId: a.id, status: a.status, evaluated: !!ev };
+    }
+    res.json({ paperAttempts: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/mine', requireAuth, requireRole('student'), async (req, res, next) => {
+
   try {
     const [attempts, papers, submissions, evaluations] = await Promise.all([
       dbService.getAttempts(),
@@ -146,7 +206,7 @@ router.post('/start', requireAuth, requireRole('student'), async (req, res, next
         ['in_progress', 'not_started', 'abandoned'].includes(a.status)
     );
     for (const stale of staleIncomplete) {
-      await dbService.deleteAttempt(stale.id).catch(() => {});
+      await dbService.deleteAttempt(stale.id).catch(() => { });
     }
 
     const now = new Date().toISOString();
@@ -293,6 +353,13 @@ router.get('/:id/result', requireAuth, requireRole('student'), async (req, res, 
       dbService.getEvaluations(),
     ]);
 
+    // Fetch group name if the paper belongs to a group
+    let groupName = null;
+    if (paper?.groupId) {
+      const group = await dbService.getQuestionPaperGroupById(paper.groupId);
+      groupName = group?.name || null;
+    }
+
     const submission = submissions.find((s) => s.attemptId === attempt.id);
     const evaluation = evaluations.find((e) => e.submissionId === submission?.id);
     const [questionEvals, reviewer] = await Promise.all([
@@ -302,14 +369,14 @@ router.get('/:id/result', requireAuth, requireRole('student'), async (req, res, 
 
     res.json({
       attempt: enrichAttempt(attempt, [paper], submissions, evaluations),
-      paper,
+      paper: { ...paper, groupName },
       submission,
       evaluation: evaluation
         ? {
-            ...evaluation,
-            reviewerName: reviewer?.name,
-            questionEvaluations: questionEvals,
-          }
+          ...evaluation,
+          reviewerName: reviewer?.name,
+          questionEvaluations: questionEvals,
+        }
         : null,
     });
   } catch (err) {

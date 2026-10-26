@@ -69,7 +69,6 @@ export function ReviewerDashboard() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Student</th>
                   <th>Paper</th>
                   <th>Status</th>
                   <th></th>
@@ -78,7 +77,6 @@ export function ReviewerDashboard() {
               <tbody>
                 {data.recentAssignments.map((a) => (
                   <tr key={a.id}>
-                    <td>{a.studentName}</td>
                     <td>{a.paperTitle}</td>
                     <td>
                       <span className={`pill ${a.status}`}>{a.status}</span>
@@ -122,7 +120,6 @@ export function ReviewerAssignments() {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Student</th>
               <th>Paper</th>
               <th>Assigned</th>
               <th>Status</th>
@@ -132,7 +129,6 @@ export function ReviewerAssignments() {
           <tbody>
             {assignments.map((a) => (
               <tr key={a.id}>
-                <td>{a.studentName}</td>
                 <td>{a.paperTitle}</td>
                 <td>{a.assignedAt ? new Date(a.assignedAt).toLocaleString() : '—'}</td>
                 <td>
@@ -355,9 +351,6 @@ export function ReviewSubmissionPage() {
 
         <div className="rev-topbar-info">
           <span className="rev-topbar-title">{assignment.paperTitle}</span>
-          <span className="rev-topbar-meta">
-            {assignment.studentName} · {assignment.studentEmail}
-          </span>
         </div>
 
         {/* Tab toggle — both annotators remain mounted */}
@@ -453,6 +446,7 @@ export function ReviewSubmissionPage() {
                     placeholder="e.g. 72"
                     onChange={(e) => setMarksAwarded(e.target.value)}
                     className="rev-marks-input"
+                    style={{ color: '#000000' }}
                   />
                   {data?.assignment?.totalMarks && (
                     <span className="rev-marks-max">/ {data.assignment.totalMarks}</span>
