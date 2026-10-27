@@ -17,6 +17,15 @@ function formatDateTime(iso) {
   });
 }
 
+const LS_EXEMPTIONS_KEY = 'mentaura_subject_exemptions';
+function getExemptions(userId, groupId) {
+  try {
+    const raw = localStorage.getItem(LS_EXEMPTIONS_KEY);
+    const data = raw ? JSON.parse(raw) : {};
+    return (data[userId] && data[userId][groupId]) || [];
+  } catch { return []; }
+}
+
 export default function PaperDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -51,6 +60,13 @@ export default function PaperDetailPage() {
   const availableTimestamp = paper?.availableAt ? new Date(paper.availableAt).getTime() : 0;
   const isAvailable = !isScheduled || now >= availableTimestamp;
 
+  const isExempted = Boolean(
+    user &&
+    paper?.groupId &&
+    paper?.subjectId &&
+    getExemptions(user.id, paper.groupId).includes(paper.subjectId)
+  );
+
   // Auto-refetch when scheduled time is reached to obtain the full paper with pdfUrl
   useEffect(() => {
     if (paper && isScheduled && !paper.isAvailable && now >= availableTimestamp) {
@@ -59,6 +75,9 @@ export default function PaperDetailPage() {
   }, [now, availableTimestamp, isScheduled, paper]);
 
   function handleAttemptClick() {
+    if (isExempted) {
+      return;
+    }
     if (!isAvailable) {
       setError(`This question paper is scheduled and will open on ${formatDateTime(paper.availableAt)}.`);
       return;
@@ -237,8 +256,34 @@ export default function PaperDetailPage() {
             )}
           </div>
 
+          {/* ── Exemption Notice ── */}
+          {isExempted && (
+            <div
+              className="panel"
+              style={{
+                background: '#f5f3ff',
+                border: '1px solid #c7d2fe',
+                borderRadius: '12px',
+                padding: '1.25rem',
+                margin: '1.5rem 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+              }}
+            >
+              <div>
+                <strong style={{ color: '#4338ca', fontSize: '1.05rem', display: 'block' }}>
+                  Subject Marked as Exempted
+                </strong>
+                <p style={{ margin: '0.25rem 0 0', color: '#6366f1', fontSize: '0.9rem' }}>
+                  You have marked this subject as an exemption in your group. You are not required to attempt this paper.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ── Scheduled Access Notice ── */}
-          {!isAvailable && (
+          {!isExempted && !isAvailable && (
             <div
               className="panel"
               style={{
@@ -268,7 +313,25 @@ export default function PaperDetailPage() {
           {error && <p className="error">{error}</p>}
 
           <div className="cta-row" style={{ marginTop: '1.5rem' }}>
-            {isAvailable ? (
+            {isExempted ? (
+              <button
+                className="btn ghost lg"
+                disabled
+                style={{
+                  opacity: 0.85,
+                  cursor: 'default',
+                  border: '1.5px solid #cbd5e1',
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                Exemption &ndash; Not Required
+              </button>
+            ) : isAvailable ? (
               <button className="btn primary lg" onClick={handleAttemptClick} disabled={busy}>
                 {busy ? 'Starting…' : 'Attempt this paper'}
               </button>

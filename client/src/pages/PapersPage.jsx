@@ -127,7 +127,7 @@ export default function PapersPage() {
     e.preventDefault();
     e.stopPropagation();
     if (!user) {
-      navigate('/login?next=/papers');
+      navigate(`/login?next=/groups/${group.id}`);
       return;
     }
     if (user.role !== 'student') return;
@@ -155,22 +155,30 @@ export default function PapersPage() {
   // ── Filtering ────────────────────────────────────────────────────────────────
   const searchTerm = filters.q.toLowerCase().trim();
   const filteredGroups = groups.filter((g) => {
-    const allPapers = (g.schedules || []).flatMap((s) => s.papers || []);
-    const matchingPapers = allPapers.filter((p) => {
-      if (filters.caLevel && p.caLevel !== filters.caLevel) return false;
-      if (filters.subjectId && p.subjectId !== filters.subjectId) return false;
-      if (searchTerm) {
-        if (!p.title?.toLowerCase().includes(searchTerm) &&
-            !p.subjectName?.toLowerCase().includes(searchTerm)) return false;
-      }
-      return true;
-    });
-    if (filters.caLevel || filters.subjectId) return matchingPapers.length > 0;
-    if (searchTerm) {
-      return g.name?.toLowerCase().includes(searchTerm) ||
-             g.description?.toLowerCase().includes(searchTerm) ||
-             matchingPapers.length > 0;
+    const groupLevel = g.caLevel || 'Intermediate';
+    if (filters.caLevel && groupLevel !== filters.caLevel) {
+      return false;
     }
+
+    const allPapers = (g.schedules || []).flatMap((s) => s.papers || []);
+    if (filters.subjectId) {
+      const hasSubject = allPapers.some((p) => p.subjectId === filters.subjectId);
+      if (!hasSubject) return false;
+    }
+
+    if (searchTerm) {
+      const matchesGroup =
+        g.name?.toLowerCase().includes(searchTerm) ||
+        g.description?.toLowerCase().includes(searchTerm) ||
+        groupLevel.toLowerCase().includes(searchTerm);
+      const matchesPaper = allPapers.some(
+        (p) =>
+          p.title?.toLowerCase().includes(searchTerm) ||
+          p.subjectName?.toLowerCase().includes(searchTerm)
+      );
+      if (!matchesGroup && !matchesPaper) return false;
+    }
+
     return true;
   });
 
@@ -262,12 +270,34 @@ export default function PapersPage() {
                       ? '0 2px 12px rgba(21,128,61,0.10)'
                       : '0 2px 8px rgba(0,0,0,0.04)';
                   }}
-                  onClick={() => navigate(`/groups/${g.id}`)}
+                  onClick={() => {
+                    if (!user) {
+                      navigate(`/login?next=/groups/${g.id}`);
+                      return;
+                    }
+                    navigate(`/groups/${g.id}`);
+                  }}
                 >
                   <div>
                     {/* Header row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                          <span
+                            className="pill"
+                            style={{
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              background: g.caLevel === 'Final' ? '#fdf2f8' : '#eff6ff',
+                              color: g.caLevel === 'Final' ? '#be185d' : '#1d4ed8',
+                              border: g.caLevel === 'Final' ? '1px solid #fbcfe8' : '1px solid #bfdbfe',
+                              borderRadius: '6px',
+                              padding: '0.15rem 0.5rem',
+                            }}
+                          >
+                            {g.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
+                          </span>
+                        </div>
                         <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3, letterSpacing: '-0.01em', wordBreak: 'break-word' }}>
                           {g.name}
                         </h3>
@@ -301,7 +331,14 @@ export default function PapersPage() {
                       /* Already enrolled → Attempt */
                       <div
                         style={{ width: '100%', background: 'linear-gradient(135deg,#15803d,#16a34a)', color: '#fff', borderRadius: '10px', padding: '0.58rem 1rem', fontSize: '0.88rem', fontWeight: 700, textAlign: 'center', boxShadow: '0 2px 8px rgba(21,128,61,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', cursor: 'pointer' }}
-                        onClick={(e) => { e.stopPropagation(); navigate(`/groups/${g.id}`); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!user) {
+                            navigate(`/login?next=/groups/${g.id}`);
+                            return;
+                          }
+                          navigate(`/groups/${g.id}`);
+                        }}
                       >
                         Attempt →
                       </div>

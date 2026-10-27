@@ -53,8 +53,8 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [email, setEmail] = useState('student@caacademy.com');
-  const [password, setPassword] = useState('student123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -76,7 +76,7 @@ export function LoginPage() {
   return (
     <PublicLayout>
       <section className="page-band auth-band">
-        <form className="panel form auth-form" onSubmit={submit}>
+        <form className="panel form auth-form" onSubmit={submit} autoComplete="off">
           <div className="auth-logo-center">
             <img src="/mentaura-logo.png" alt="Mentaura CA" className="auth-logo-img" />
           </div>
@@ -84,7 +84,13 @@ export function LoginPage() {
           <p className="muted">Students, reviewers, and admins use the same login.</p>
           <label>
             Email
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
+              required
+            />
           </label>
           <label>
             Password
@@ -93,6 +99,7 @@ export function LoginPage() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="new-password"
                 required
               />
               <button
@@ -113,12 +120,6 @@ export function LoginPage() {
           <p className="muted">
             New student? <Link to="/register">Create an account</Link>
           </p>
-          <div className="demo-creds">
-            <p>Demo accounts</p>
-            <code>student@caacademy.com / student123</code>
-            <code>reviewer@caacademy.com / reviewer123</code>
-            <code>admin@caacademy.com / admin123</code>
-          </div>
         </form>
       </section>
     </PublicLayout>
@@ -133,7 +134,6 @@ export function RegisterPage() {
     email: '',
     password: '',
     caLevel: 'Intermediate',
-    batch: '',
     phone: '',
   });
   const [showPassword, setShowPassword] = useState(false);
@@ -142,6 +142,16 @@ export function RegisterPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (
+      !form.name.trim() ||
+      !form.email.trim() ||
+      !form.password ||
+      !form.caLevel?.trim() ||
+      !form.phone.trim()
+    ) {
+      setError('All fields are mandatory. Please fill in every field.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -157,32 +167,34 @@ export function RegisterPage() {
   return (
     <PublicLayout>
       <section className="page-band auth-band">
-        <form className="panel form auth-form" onSubmit={submit}>
+        <form className="panel form auth-form" onSubmit={submit} autoComplete="off">
           <div className="auth-logo-center">
             <img src="/mentaura-logo.png" alt="Mentaura CA" className="auth-logo-img" />
           </div>
           <h1>Student Registration</h1>
           <p className="muted">Join Mentaura CA online test &amp; evaluation series.</p>
           <label>
-            Full name
+            Full name *
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
           </label>
           <label>
-            Email
+            Email *
             <input
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
+              autoComplete="off"
               required
             />
           </label>
           <label>
-            Password
+            Password *
             <div className="password-input-wrap">
               <input
                 type={showPassword ? 'text' : 'password'}
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
+                autoComplete="new-password"
                 required
                 minLength={6}
               />
@@ -198,19 +210,21 @@ export function RegisterPage() {
             </div>
           </label>
           <label>
-            CA Level
-            <select value={form.caLevel} onChange={(e) => setForm({ ...form, caLevel: e.target.value })}>
-              <option>Intermediate</option>
-              <option>Final</option>
+            CA Level *
+            <select value={form.caLevel} onChange={(e) => setForm({ ...form, caLevel: e.target.value })} required>
+              <option value="Intermediate">Intermediate</option>
+              <option value="Final">Final</option>
             </select>
           </label>
           <label>
-            Batch
-            <input value={form.batch} onChange={(e) => setForm({ ...form, batch: e.target.value })} />
-          </label>
-          <label>
-            Phone
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            Phone *
+            <input
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              placeholder="e.g. +91 9876543210"
+              required
+            />
           </label>
           {error && <p className="error">{error}</p>}
           <button className="btn primary" disabled={busy}>

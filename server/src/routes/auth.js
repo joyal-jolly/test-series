@@ -19,8 +19,14 @@ function publicUser(user) {
 router.post('/register', async (req, res, next) => {
   try {
     const { name, email, password, caLevel, batch, phone } = req.body || {};
-    if (!name?.trim() || !email?.trim() || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
+    if (
+      !name?.trim() ||
+      !email?.trim() ||
+      !password ||
+      !caLevel?.trim() ||
+      !phone?.trim()
+    ) {
+      return res.status(400).json({ error: 'All fields (name, email, password, CA level, phone) are required' });
     }
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });

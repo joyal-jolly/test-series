@@ -92,6 +92,50 @@ router.post('/enroll/:groupId', requireAuth, requireRole('student'), async (req,
   }
 });
 
+// ─── Exemption endpoints ──────────────────────────────────────────────────────
+
+// GET /api/student/exemptions/:groupId
+router.get('/exemptions/:groupId', requireAuth, requireRole('student'), async (req, res) => {
+  const { groupId } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('student_exemptions')
+      .select('"subjectId"')
+      .eq('studentId', req.user.id)
+      .eq('groupId', groupId);
+    if (error) return res.json({ subjectIds: [] });
+    res.json({ subjectIds: (data || []).map((r) => r.subjectId) });
+  } catch {
+    res.json({ subjectIds: [] });
+  }
+});
+
+// POST /api/student/exemptions/:groupId
+router.post('/exemptions/:groupId', requireAuth, requireRole('student'), async (req, res) => {
+  const { groupId } = req.params;
+  const { subjectIds = [] } = req.body || {};
+  try {
+    await supabase
+      .from('student_exemptions')
+      .delete()
+      .eq('studentId', req.user.id)
+      .eq('groupId', groupId);
+    if (Array.isArray(subjectIds) && subjectIds.length > 0) {
+      const records = subjectIds.map((sid) => ({
+        id: `${req.user.id}-${groupId}-${sid}`,
+        studentId: req.user.id,
+        groupId,
+        subjectId: sid,
+        createdAt: new Date().toISOString(),
+      }));
+      await supabase.from('student_exemptions').insert(records);
+    }
+    res.json({ ok: true, subjectIds });
+  } catch {
+    res.json({ ok: true, subjectIds });
+  }
+});
+
 // GET /api/student/paper-attempts — { [paperId]: { attemptId, status, evaluated } }
 router.get('/paper-attempts', requireAuth, requireRole('student'), async (req, res, next) => {
   try {

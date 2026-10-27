@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS public.question_paper_groups (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   description TEXT DEFAULT '',
+  "caLevel" TEXT NOT NULL DEFAULT 'Intermediate',
   "numSchedules" INTEGER NOT NULL DEFAULT 1,
   "numSubjectsPerSchedule" INTEGER NOT NULL DEFAULT 3,
   "createdBy" TEXT NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
@@ -16,7 +17,8 @@ CREATE TABLE IF NOT EXISTS public.question_paper_groups (
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Ensure numSubjectsPerSchedule column exists if table was already created
+-- Ensure numSubjectsPerSchedule and caLevel columns exist if table was already created
+ALTER TABLE public.question_paper_groups ADD COLUMN IF NOT EXISTS "caLevel" TEXT NOT NULL DEFAULT 'Intermediate';
 ALTER TABLE public.question_paper_groups ADD COLUMN IF NOT EXISTS "numSubjectsPerSchedule" INTEGER NOT NULL DEFAULT 3;
 
 CREATE INDEX IF NOT EXISTS idx_qp_groups_created ON public.question_paper_groups("createdAt");

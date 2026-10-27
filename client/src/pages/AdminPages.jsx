@@ -154,6 +154,7 @@ export function AdminPapers() {
   const [groupForm, setGroupForm] = useState({
     name: '',
     description: '',
+    caLevel: 'Intermediate',
     numSchedules: 5,
     numSubjectsPerSchedule: 3,
   });
@@ -213,12 +214,13 @@ export function AdminPapers() {
         body: {
           name: groupForm.name,
           description: groupForm.description,
+          caLevel: groupForm.caLevel || 'Intermediate',
           numSchedules: Number(groupForm.numSchedules),
           numSubjectsPerSchedule: Number(groupForm.numSubjectsPerSchedule),
         },
       });
       setGroupMessage('Group created successfully.');
-      setGroupForm({ name: '', description: '', numSchedules: 5, numSubjectsPerSchedule: 3 });
+      setGroupForm({ name: '', description: '', caLevel: 'Intermediate', numSchedules: 5, numSubjectsPerSchedule: 3 });
       setShowCreateGroup(false);
       reload();
     } catch (err) {
@@ -247,6 +249,7 @@ export function AdminPapers() {
         body: {
           name: editingGroup.name,
           description: editingGroup.description,
+          caLevel: editingGroup.caLevel || 'Intermediate',
           numSchedules: Number(editingGroup.numSchedules),
           numSubjectsPerSchedule: Number(editingGroup.numSubjectsPerSchedule),
         },
@@ -312,14 +315,19 @@ export function AdminPapers() {
         durationMinutes: existingPaper.durationMinutes || 180,
       });
     } else {
+      const targetGroup = groups.find((g) => g.id === groupId) || selectedGroup;
+      const groupLevel = targetGroup?.caLevel || 'Intermediate';
+      const levelSubjects = subjects.filter((s) => s.caLevel === groupLevel);
+      const candidateSubjects = levelSubjects.length > 0 ? levelSubjects : subjects;
+
       // Find the first subject not yet uploaded in this schedule
       const usedSubjectIds = (existingPapers || []).map((p) => p.subjectId);
-      const nextAvailableSubject = subjects.find((s) => !usedSubjectIds.includes(s.id)) || subjects[0];
+      const nextAvailableSubject = candidateSubjects.find((s) => !usedSubjectIds.includes(s.id)) || candidateSubjects[0];
 
       setPaperForm({
         title: nextAvailableSubject ? `Schedule ${scheduleNumber} - ${nextAvailableSubject.name}` : `Schedule ${scheduleNumber} Paper`,
-        subjectId: nextAvailableSubject?.id || subjects[0]?.id || '',
-        caLevel: 'Intermediate',
+        subjectId: nextAvailableSubject?.id || candidateSubjects[0]?.id || '',
+        caLevel: groupLevel,
         paperType: 'Group 1',
         chapter: '',
         totalMarks: 100,
@@ -433,6 +441,17 @@ export function AdminPapers() {
             </label>
             <div className="row-2">
               <label>
+                CA Level
+                <select
+                  value={groupForm.caLevel}
+                  onChange={(e) => setGroupForm({ ...groupForm, caLevel: e.target.value })}
+                  required
+                >
+                  <option value="Intermediate">CA Intermediate</option>
+                  <option value="Final">CA Final</option>
+                </select>
+              </label>
+              <label>
                 Number of Schedules
                 <input
                   type="number"
@@ -446,21 +465,21 @@ export function AdminPapers() {
                   e.g. 5 schedules (Schedule 1, 2, 3, 4, 5)
                 </span>
               </label>
-              <label>
-                Subjects per Schedule
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={groupForm.numSubjectsPerSchedule}
-                  onChange={(e) => setGroupForm({ ...groupForm, numSubjectsPerSchedule: e.target.value })}
-                  required
-                />
-                <span className="muted" style={{ fontSize: '0.8rem' }}>
-                  e.g. 3 subjects (3 papers uploaded per schedule)
-                </span>
-              </label>
             </div>
+            <label>
+              Subjects per Schedule
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={groupForm.numSubjectsPerSchedule}
+                onChange={(e) => setGroupForm({ ...groupForm, numSubjectsPerSchedule: e.target.value })}
+                required
+              />
+              <span className="muted" style={{ fontSize: '0.8rem' }}>
+                e.g. 3 subjects (3 papers uploaded per schedule)
+              </span>
+            </label>
             {groupError && <p className="error">{groupError}</p>}
             <button className="btn primary" style={{ marginTop: '0.5rem' }}>Create Group</button>
           </form>
@@ -501,8 +520,11 @@ export function AdminPapers() {
                 onMouseLeave={(e) => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.transform = ''; }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {g.name}
+                    <span className="pill" style={{ fontSize: '0.74rem', background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
+                      {g.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
+                    </span>
                   </h3>
                   {g.description && <p className="muted" style={{ margin: '0.2rem 0 0.5rem', fontSize: '0.83rem' }}>{g.description}</p>}
                   {/* Progress bar */}
@@ -557,7 +579,12 @@ export function AdminPapers() {
               {/* Modal Header */}
               <div className="modal-head" style={{ flexShrink: 0 }}>
                 <div>
-                  <h2 style={{ margin: 0 }}> {g.name}</h2>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <h2 style={{ margin: 0 }}>{g.name}</h2>
+                    <span className="pill" style={{ fontSize: '0.75rem', background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
+                      {g.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
+                    </span>
+                  </div>
                   {g.description && <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.85rem' }}>{g.description}</p>}
                 </div>
                 <button
@@ -794,6 +821,17 @@ export function AdminPapers() {
               </label>
               <div className="row-2">
                 <label>
+                  CA Level
+                  <select
+                    value={editingGroup.caLevel || 'Intermediate'}
+                    onChange={(e) => setEditingGroup({ ...editingGroup, caLevel: e.target.value })}
+                    required
+                  >
+                    <option value="Intermediate">CA Intermediate</option>
+                    <option value="Final">CA Final</option>
+                  </select>
+                </label>
+                <label>
                   Number of Schedules
                   <input
                     type="number"
@@ -804,18 +842,18 @@ export function AdminPapers() {
                     required
                   />
                 </label>
-                <label>
-                  Subjects per Schedule
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={editingGroup.numSubjectsPerSchedule || 3}
-                    onChange={(e) => setEditingGroup({ ...editingGroup, numSubjectsPerSchedule: e.target.value })}
-                    required
-                  />
-                </label>
               </div>
+              <label>
+                Subjects per Schedule
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={editingGroup.numSubjectsPerSchedule || 3}
+                  onChange={(e) => setEditingGroup({ ...editingGroup, numSubjectsPerSchedule: e.target.value })}
+                  required
+                />
+              </label>
               {editGroupError && <p className="error">{editGroupError}</p>}
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
                 <button type="button" className="btn ghost" onClick={() => setEditingGroup(null)}>Cancel</button>
@@ -1077,6 +1115,49 @@ export function AdminSubmissions() {
   );
 }
 
+function EditIcon({ size = 15 }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+      <path d="m15 5 4 4" />
+    </svg>
+  );
+}
+
+function TrashIcon({ size = 15 }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+      <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+      <line x1="10" x2="10" y1="11" y2="17" />
+      <line x1="14" x2="14" y1="11" y2="17" />
+    </svg>
+  );
+}
+
 export function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [activeRole, setActiveRole] = useState('student');
@@ -1259,17 +1340,19 @@ export function AdminUsers() {
                         type="button"
                         className="icon-action-btn edit"
                         title="Edit user"
+                        aria-label="Edit user"
                         onClick={() => openEdit(u)}
                       >
-                        ✏️
+                        <EditIcon />
                       </button>
                       <button
                         type="button"
                         className="icon-action-btn delete"
                         title="Delete user"
+                        aria-label="Delete user"
                         onClick={() => deleteUser(u)}
                       >
-                        🗑️
+                        <TrashIcon />
                       </button>
                     </div>
                   </td>

@@ -306,6 +306,7 @@ router.get('/groups', async (_req, res, next) => {
 
       return {
         ...g,
+        caLevel: g.caLevel || 'Intermediate',
         numSubjectsPerSchedule: maxSubjects,
         schedules,
         totalExpectedPapers,
@@ -357,7 +358,7 @@ router.get('/groups/:id', async (req, res, next) => {
       });
     }
 
-    res.json({ group: { ...group, numSubjectsPerSchedule: maxSubjects, schedules } });
+    res.json({ group: { ...group, caLevel: group.caLevel || 'Intermediate', numSubjectsPerSchedule: maxSubjects, schedules } });
   } catch (err) {
     next(err);
   }
@@ -365,17 +366,19 @@ router.get('/groups/:id', async (req, res, next) => {
 
 router.post('/groups', async (req, res, next) => {
   try {
-    const { name, description, numSchedules, numSubjectsPerSchedule } = req.body || {};
+    const { name, description, numSchedules, numSubjectsPerSchedule, caLevel } = req.body || {};
     if (!name || !numSchedules || numSchedules < 1) {
       return res.status(400).json({ error: 'name and numSchedules (>= 1) are required' });
     }
 
     const subjectsCount = Number(numSubjectsPerSchedule) >= 1 ? Number(numSubjectsPerSchedule) : 3;
+    const level = caLevel === 'Final' ? 'Final' : 'Intermediate';
     const now = new Date().toISOString();
     const group = {
       id: uuid(),
       name: name.trim(),
       description: description || '',
+      caLevel: level,
       numSchedules: Number(numSchedules),
       numSubjectsPerSchedule: subjectsCount,
       createdBy: req.user.id,
@@ -398,6 +401,9 @@ router.patch('/groups/:id', async (req, res, next) => {
     const updates = {};
     if (req.body.name !== undefined) updates.name = req.body.name.trim();
     if (req.body.description !== undefined) updates.description = req.body.description;
+    if (req.body.caLevel !== undefined) {
+      updates.caLevel = req.body.caLevel === 'Final' ? 'Final' : 'Intermediate';
+    }
     if (req.body.numSchedules !== undefined) {
       const num = Number(req.body.numSchedules);
       if (num < 1) return res.status(400).json({ error: 'numSchedules must be >= 1' });
