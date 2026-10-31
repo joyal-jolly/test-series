@@ -31,6 +31,7 @@ export function AdminPortalLayout({ children, unassignedCount }) {
     },
     { to: '/admin/users', label: 'Users' },
     { to: '/admin/insights', label: 'Insights' },
+    { to: '/admin/publish-results', label: 'Publish Results' },
   ];
 
   return (
@@ -2320,6 +2321,496 @@ function InsightStudentScorecard({ group, student, onBack }) {
             </div>
           )
         ))
+      )}
+    </AdminPortalLayout>
+  );
+}
+
+// ─── Admin Publish Results ──────────────────────────────────────────────────────
+export function AdminPublishResults() {
+  const [view, setView] = useState('list'); // 'list' | 'detail'
+  const [groups, setGroups] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [search, setSearch] = useState('');
+  const [filterGroup, setFilterGroup] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+
+  // Publish decision state
+  const [finalResult, setFinalResult] = useState('');
+  const [adminRemarks, setAdminRemarks] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
+
+  function reloadList() {
+    setLoading(true);
+    api('/api/admin/publish-result/groups')
+      .then((d) => { setGroups(d.groups || []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }
+
+  useEffect(() => { reloadList(); }, []);
+
+  // Build flat list of eligible students
+  const allEligible = [];
+  for (const g of groups) {
+    for (const s of g.eligibleStudents || []) {
+      allEligible.push({ ...s, groupId: g.id, groupName: g.name, groupCaLevel: g.caLevel });
+    }
+  }
+
+  const filtered = allEligible.filter((s) => {
+    if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterGroup && s.groupId !== filterGroup) return false;
+    if (filterStatus === 'published' && !s.isPublished) return false;
+    if (filterStatus === 'not_published' && s.isPublished) return false;
+    return true;
+  });
+
+  async function openDetail(groupInfo, student) {
+    setSelectedGroup(groupInfo);
+    setSelectedStudent(student);
+    setDetailLoading(true);
+    setDetailError('');
+    setDetail(null);
+    setFinalResult('');
+    setAdminRemarks('');
+    setPublishError('');
+    setPublishSuccess(false);
+    setView('detail');
+    try {
+      const d = await api(`/api/admin/publish-result/groups/${groupInfo.groupId}/students/${student.id}`);
+      setDetail(d);
+      if (d.publication) {
+        setFinalResult(d.publication.result || '');
+        setAdminRemarks(d.publication.feedback || '');
+      }
+    } catch (err) {
+      setDetailError(err.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  async function handlePublish() {
+    if (!finalResult) { setPublishError('Please select Pass or Fail.'); return; }
+    setPublishError('');
+    setPublishing(true);
+    try {
+      await api(`/api/admin/publish-result/groups/${selectedGroup.groupId}/students/${selectedStudent.id}/publish`, {
+        method: 'POST',
+        body: { finalStatus: finalResult, adminRemarks },
+      });
+      setPublishSuccess(true);
+      setShowConfirm(false);
+      const d = await api(`/api/admin/publish-result/groups/${selectedGroup.groupId}/students/${selectedStudent.id}`);
+      setDetail(d);
+      reloadList();
+    } catch (err) {
+      setPublishError(err.message);
+      setShowConfirm(false);
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  // ── Detail view ──────────────────────────────────────────────────────────────
+  if (view === 'detail') {
+    const pub = detail?.publication;
+    const summary = detail?.summary;
+    const isAlreadyPublished = !!pub;
+
+    return (
+      <AdminPortalLayout>
+        {/* Confirmation modal */}
+        {showConfirm && (
+          <div className="modal-backdrop" onClick={() => setShowConfirm(false)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+              <div className="modal-head">
+                <h2>Confirm Publication</h2>
+                <button type="button" className="btn subtle" onClick={() => setShowConfirm(false)} style={{ padding: '0.35rem 0.75rem', borderRadius: '50%' }}>✕</button>
+              </div>
+              <p className="muted" style={{ margin: '0 0 1.25rem' }}>
+                You are about to publish the result for <strong>{selectedStudent?.name}</strong> in <strong>{selectedGroup?.groupName}</strong>.
+              </p>
+              <div style={{ padding: '1rem', borderRadius: '10px', background: finalResult === 'PASS' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '2rem' }}>{finalResult === 'PASS' ? '✅' : '❌'}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1.15rem', color: finalResult === 'PASS' ? 'var(--ok, #22c55e)' : 'var(--danger, #ef4444)' }}>{finalResult}</div>
+                  {adminRemarks && <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>Remarks: {adminRemarks}</div>}
+                </div>
+              </div>
+              {publishError && <p className="error" style={{ marginBottom: '0.75rem' }}>{publishError}</p>}
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button type="button" className="btn ghost" onClick={() => setShowConfirm(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={handlePublish}
+                  disabled={publishing}
+                  style={finalResult === 'FAIL' ? { background: '#ef4444', borderColor: '#ef4444' } : {}}
+                >
+                  {publishing ? 'Publishing…' : isAlreadyPublished ? 'Republish Result' : 'Publish Result'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Breadcrumb */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          <button className="btn ghost" onClick={() => { setView('list'); setDetail(null); }}>← Publish Results</button>
+          <span className="muted" style={{ fontSize: '0.9rem' }}>/ {selectedGroup?.groupName}</span>
+          <span className="muted" style={{ fontSize: '0.9rem' }}>/ {selectedStudent?.name}</span>
+        </div>
+
+        {detailLoading && <p className="muted">Loading student details…</p>}
+        {detailError && <p className="error">{detailError}</p>}
+
+        {!detailLoading && detail && (
+          <>
+            {/* Student info card */}
+            <div className="panel" style={{ marginBottom: '1.25rem', padding: '1.25rem 1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', alignItems: 'flex-start' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.3rem' }}>{detail.student.name}</h2>
+                  <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>{detail.student.email}{detail.student.phone ? ` · ${detail.student.phone}` : ''}</p>
+                  <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
+                    Group: <strong>{detail.group.name}</strong> · {detail.group.caLevel}
+                  </p>
+                </div>
+                {summary && (
+                  <div className="stats-grid" style={{ margin: 0 }}>
+                    {[
+                      ['Required Papers', summary.totalRequired],
+                      ['Reviewed', summary.totalEvaluated],
+                      ['Marks', summary.totalMaxMarks > 0 ? `${summary.totalMarksAwarded} / ${summary.totalMaxMarks}` : '—'],
+                      ['Overall %', summary.overallPct != null ? `${summary.overallPct}%` : '—'],
+                    ].map(([label, val]) => (
+                      <div className="stat-tile" key={label}><strong style={{ fontSize: '1.05rem' }}>{val}</strong><span>{label}</span></div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {isAlreadyPublished && (
+                <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '8px', background: pub.result === 'PASS' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '1.5rem' }}>{pub.result === 'PASS' ? '✅' : '❌'}</span>
+                  <div>
+                    <div style={{ fontWeight: 700, color: pub.result === 'PASS' ? 'var(--ok, #22c55e)' : 'var(--danger, #ef4444)' }}>Published: {pub.result}</div>
+                    <div className="muted" style={{ fontSize: '0.82rem' }}>Published on {new Date(pub.publishedAt).toLocaleString()}</div>
+                    {pub.feedback && <div className="muted" style={{ fontSize: '0.83rem', marginTop: '0.2rem' }}>Remarks: {pub.feedback}</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Paper-wise breakdown per schedule */}
+            {(detail.schedules || []).map((sched) => (
+              sched.papers.length > 0 && (
+                <div key={sched.scheduleNumber} className="panel" style={{ marginBottom: '1.25rem' }}>
+                  <div className="panel-head">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <h3 style={{ margin: 0 }}>Schedule {sched.scheduleNumber}</h3>
+                      <span className={`pill ${sched.isReleased !== false ? 'published' : 'draft'}`} style={{ fontSize: '0.75rem' }}>
+                        {sched.isReleased !== false ? 'Released' : 'Not Released'}
+                      </span>
+                    </div>
+                    {sched.availableAt && (
+                      <span className="muted" style={{ fontSize: '0.82rem' }}>
+                        Available: {new Date(sched.availableAt).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Subject</th>
+                        <th>Paper</th>
+                        <th style={{ textAlign: 'center' }}>Status</th>
+                        <th style={{ textAlign: 'right' }}>Max Marks</th>
+                        <th style={{ textAlign: 'right' }}>Marks Obtained</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sched.papers.map((paper) => {
+                        const pct = paper.marksAwarded != null && paper.totalMarks
+                          ? Math.round((paper.marksAwarded / paper.totalMarks) * 100)
+                          : null;
+                        return (
+                          <tr key={paper.paperId}>
+                            <td><strong style={{ fontSize: '0.92rem' }}>{paper.subjectName}</strong></td>
+                            <td>
+                              <span style={{ fontWeight: 500 }}>{paper.title}</span>
+                              {paper.paperType && <div className="muted" style={{ fontSize: '0.76rem' }}>{paper.paperType}</div>}
+                            </td>
+                            <td style={{ textAlign: 'center' }}>
+                              {paper.isExempted ? (
+                                <span className="pill info" style={{ fontSize: '0.75rem' }}>Exempted</span>
+                              ) : (
+                                <span className={`pill ${paper.status === 'evaluated' ? 'published' : ['submitted','assigned','under_review'].includes(paper.status) ? 'assigned' : 'draft'}`} style={{ fontSize: '0.75rem' }}>
+                                  {paper.status.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {paper.isExempted ? <span className="muted">—</span> : paper.totalMarks}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {paper.isExempted ? (
+                                <span className="muted" style={{ fontSize: '0.83rem' }}>Exempted</span>
+                              ) : paper.marksAwarded != null ? (
+                                <span style={{ fontWeight: 700, color: pct >= 60 ? 'var(--ok)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)' }}>
+                                  {paper.marksAwarded}
+                                  <span className="muted" style={{ fontWeight: 400, fontSize: '0.78rem', marginLeft: '0.3rem' }}>({pct}%)</span>
+                                </span>
+                              ) : (
+                                <span className="muted" style={{ fontSize: '0.83rem' }}>Pending review</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ))}
+
+            {/* Final Decision Section */}
+            {summary?.canPublish && (
+              <div className="panel" style={{ marginBottom: '1.5rem', border: '2px solid var(--accent, #6366f1)', borderRadius: '14px' }}>
+                <div style={{ padding: '1.25rem 1.5rem 0' }}>
+                  <h2 style={{ margin: 0 }}>Final Result Decision</h2>
+                  <p className="muted" style={{ margin: '0.3rem 0 1.25rem', fontSize: '0.88rem' }}>
+                    Select Pass or Fail for this student's overall performance across all schedules.
+                  </p>
+                </div>
+                <div style={{ padding: '0 1.5rem 1.5rem' }}>
+                  {/* Pass/Fail radio */}
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem' }}>
+                    {['PASS', 'FAIL'].map((opt) => (
+                      <label
+                        key={opt}
+                        style={{
+                          flex: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                          padding: '0.85rem 1.25rem',
+                          borderRadius: '10px',
+                          border: `2px solid ${finalResult === opt ? (opt === 'PASS' ? '#22c55e' : '#ef4444') : 'var(--border, #d1d5db)'}`,
+                          background: finalResult === opt ? (opt === 'PASS' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)') : 'transparent',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                          fontWeight: 600,
+                          fontSize: '1rem',
+                          color: finalResult === opt ? (opt === 'PASS' ? '#16a34a' : '#dc2626') : 'inherit',
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name="finalResult"
+                          value={opt}
+                          checked={finalResult === opt}
+                          onChange={(e) => { setFinalResult(e.target.value); setPublishError(''); }}
+                          style={{ accentColor: opt === 'PASS' ? '#22c55e' : '#ef4444' }}
+                        />
+                        <span style={{ fontSize: '1.3rem' }}>{opt === 'PASS' ? '✅' : '❌'}</span>
+                        {opt}
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Admin Remarks */}
+                  <label style={{ display: 'block', marginBottom: '1.25rem' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Admin Remarks <span className="muted">(optional)</span></span>
+                    <textarea
+                      value={adminRemarks}
+                      onChange={(e) => setAdminRemarks(e.target.value)}
+                      placeholder="e.g. Good performance across all subjects. Passed comfortably."
+                      rows={3}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        marginTop: '0.5rem',
+                        padding: '0.7rem 0.9rem',
+                        borderRadius: '8px',
+                        border: '1.5px solid var(--border, #d1d5db)',
+                        fontFamily: 'inherit',
+                        fontSize: '0.9rem',
+                        resize: 'vertical',
+                        background: 'var(--surface, #fff)',
+                        color: 'inherit',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </label>
+
+                  {publishError && <p className="error" style={{ marginBottom: '0.75rem' }}>{publishError}</p>}
+                  {publishSuccess && (
+                    <div style={{ marginBottom: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontWeight: 600 }}>
+                      ✅ Result published successfully!
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'flex-end' }}>
+                    {isAlreadyPublished && (
+                      <span className="muted" style={{ fontSize: '0.82rem' }}>Already published — republishing will overwrite.</span>
+                    )}
+                    <button
+                      type="button"
+                      className="btn primary"
+                      style={{
+                        padding: '0.7rem 1.5rem',
+                        fontSize: '1rem',
+                        fontWeight: 700,
+                        background: finalResult === 'FAIL' ? '#ef4444' : undefined,
+                        borderColor: finalResult === 'FAIL' ? '#ef4444' : undefined,
+                      }}
+                      onClick={() => {
+                        if (!finalResult) { setPublishError('Please select Pass or Fail before publishing.'); return; }
+                        setPublishError('');
+                        setShowConfirm(true);
+                      }}
+                      disabled={publishing}
+                    >
+                      {isAlreadyPublished ? 'Republish Result' : 'Publish Result'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {summary && !summary.canPublish && !isAlreadyPublished && (
+              <div className="panel" style={{ padding: '1.25rem 1.5rem', background: 'rgba(239,68,68,0.05)', border: '1.5px solid rgba(239,68,68,0.2)' }}>
+                <p style={{ margin: 0, fontWeight: 600, color: 'var(--danger, #ef4444)' }}>⚠ Student not yet eligible for publication.</p>
+                <p className="muted" style={{ margin: '0.35rem 0 0', fontSize: '0.88rem' }}>
+                  All required papers must be reviewed and all schedules must be released before publishing a result.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+      </AdminPortalLayout>
+    );
+  }
+
+  // ── List view ──────────────────────────────────────────────────────────────────
+  const groupOptions = groups.map((g) => ({ id: g.id, name: g.name }));
+
+  return (
+    <AdminPortalLayout>
+      <div className="panel-head" style={{ marginBottom: '1.25rem' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Publish Results</h2>
+          <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.88rem' }}>
+            Students eligible for result publication — all schedules released and all required papers reviewed.
+          </p>
+        </div>
+        <button className="btn ghost" style={{ fontSize: '0.85rem' }} onClick={reloadList}>↻ Refresh</button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+        <input
+          type="search"
+          placeholder="Search by student name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ flex: '1 1 220px', padding: '0.55rem 0.85rem', borderRadius: '8px', border: '1.5px solid var(--border, #d1d5db)', fontSize: '0.9rem', background: 'var(--surface)', color: 'inherit' }}
+        />
+        <select
+          value={filterGroup}
+          onChange={(e) => setFilterGroup(e.target.value)}
+          style={{ flex: '1 1 180px', padding: '0.55rem 0.85rem', borderRadius: '8px', border: '1.5px solid var(--border, #d1d5db)', fontSize: '0.9rem', background: 'var(--surface)', color: 'inherit' }}
+        >
+          <option value="">All Groups</option>
+          {groupOptions.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+        </select>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          style={{ flex: '1 1 160px', padding: '0.55rem 0.85rem', borderRadius: '8px', border: '1.5px solid var(--border, #d1d5db)', fontSize: '0.9rem', background: 'var(--surface)', color: 'inherit' }}
+        >
+          <option value="">All Statuses</option>
+          <option value="not_published">Not Published</option>
+          <option value="published">Published</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <p className="muted">Loading eligible students…</p>
+      ) : filtered.length === 0 ? (
+        <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p className="muted" style={{ fontSize: '1.05rem', marginBottom: '0.5rem' }}>No eligible students found.</p>
+          <p className="muted" style={{ fontSize: '0.88rem' }}>
+            Students appear here only after all schedules are released and all required papers are reviewed.
+          </p>
+        </div>
+      ) : (
+        <div className="panel">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Group</th>
+                <th style={{ textAlign: 'center' }}>Schedules</th>
+                <th style={{ textAlign: 'center' }}>Required Papers</th>
+                <th style={{ textAlign: 'center' }}>Reviewed</th>
+                <th style={{ textAlign: 'center' }}>Publication Status</th>
+                <th style={{ textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => (
+                <tr key={`${s.id}-${s.groupId}`}>
+                  <td>
+                    <strong style={{ fontSize: '0.95rem' }}>{s.name}</strong>
+                    <div className="muted" style={{ fontSize: '0.78rem' }}>{s.email}</div>
+                  </td>
+                  <td>
+                    <span style={{ fontWeight: 500 }}>{s.groupName}</span>
+                    <div className="muted" style={{ fontSize: '0.78rem' }}>{s.groupCaLevel}</div>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span className="pill published" style={{ fontSize: '0.78rem' }}>{s.completedSchedules} / {s.totalSchedules}</span>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>{s.totalRequiredPapers}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    <span className={`pill ${s.papersReviewed === s.totalRequiredPapers ? 'published' : 'assigned'}`} style={{ fontSize: '0.78rem' }}>
+                      {s.papersReviewed} / {s.totalRequiredPapers}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
+                    {s.isPublished ? (
+                      <span className={`pill ${s.result === 'PASS' ? 'published' : 'draft'}`} style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                        {s.result}
+                      </span>
+                    ) : (
+                      <span className="pill" style={{ fontSize: '0.78rem', background: '#f3f4f6', color: '#6b7280' }}>Not Published</span>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="btn subtle"
+                      style={{ padding: '0.3rem 0.75rem', fontSize: '0.82rem' }}
+                      onClick={() => openDetail(s, s)}
+                    >
+                      {s.isPublished ? 'View / Edit →' : 'View Details →'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </AdminPortalLayout>
   );

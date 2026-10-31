@@ -163,7 +163,6 @@ router.get('/paper-attempts', requireAuth, requireRole('student'), async (req, r
 });
 
 router.get('/mine', requireAuth, requireRole('student'), async (req, res, next) => {
-
   try {
     const [attempts, papers, submissions, evaluations] = await Promise.all([
       dbService.getAttempts(),
@@ -280,6 +279,121 @@ router.post('/start', requireAuth, requireRole('student'), async (req, res, next
     next(err);
   }
 });
+
+// ─── Published Results endpoints (must be BEFORE /:id to avoid shadowing) ─────
+
+// GET /api/student/published-results
+router.get('/published-results', requireAuth, requireRole('student'), async (req, res, next) => {
+  try {
+    const studentId = req.user.id;
+    const [publications, groups] = await Promise.all([
+      dbService.getPublishedResultsForStudent(studentId),
+      dbService.getQuestionPaperGroups(),
+    ]);
+    const groupMap = new Map(groups.map((g) => [g.id, g]));
+    const results = publications.map((pub) => {
+      const group = groupMap.get(pub.groupId);
+      return {
+        groupId: pub.groupId,
+        groupName: group?.name || 'Unknown',
+        groupDescription: group?.description || null,
+        caLevel: group?.caLevel || null,
+        result: pub.result,
+        isPassed: pub.isPassed,
+        totalMarksAwarded: pub.totalMarksAwarded,
+        totalMaxMarks: pub.totalMaxMarks,
+        overallPct: pub.overallPct,
+        feedback: pub.feedback || null,
+        publishedAt: pub.publishedAt,
+      };
+    });
+    res.json({ results });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/student/published-results/:groupId
+router.get('/published-results/:groupId', requireAuth, requireRole('student'), async (req, res, next) => {
+  try {
+    const studentId = req.user.id;
+    const { groupId } = req.params;
+
+    // Verify ownership: only the student whose result is published can access it
+    const publication = await dbService.getGroupResultPublication(studentId, groupId);
+    if (!publication) {
+      return res.status(404).json({ error: 'No published result found for this group' });
+    }
+
+    const [group, groupPapers, subjects, groupSchedules, studentSubs, evaluations] = await Promise.all([
+      dbService.getQuestionPaperGroupById(groupId),
+      dbService.getQuestionPapersByGroup(groupId),
+      dbService.getSubjects(),
+      dbService.getSchedulesByGroup(groupId),
+      dbService.getSubmissionsByStudent(studentId),
+      dbService.getEvaluations(),
+    ]);
+
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+
+    // Fetch exemptions for this student+group
+    const { data: exemptionRows } = await supabase
+      .from('student_exemptions')
+      .select('*')
+      .eq('studentId', studentId)
+      .eq('groupId', groupId);
+    const exemptedSubjectIds = new Set((exemptionRows || []).map((e) => e.subjectId));
+
+    const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+    const evalMap = new Map(evaluations.map((e) => [e.submissionId, e]));
+    const subByPaperId = new Map(studentSubs.map((s) => [s.questionPaperId, s]));
+    const schedMap = new Map(groupSchedules.map((s) => [s.scheduleNumber, s]));
+
+    const scheduleList = [];
+    for (let sn = 1; sn <= group.numSchedules; sn++) {
+      const schedPapers = groupPapers.filter((p) => p.scheduleNumber === sn);
+      if (schedPapers.length === 0) continue;
+      const schedRecord = schedMap.get(sn);
+      const availAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+
+      const paperData = schedPapers.map((paper) => {
+        const isExempted = exemptedSubjectIds.has(paper.subjectId);
+        const subject = subjectMap.get(paper.subjectId);
+        const sub = subByPaperId.get(paper.id);
+        const evaluation = sub ? evalMap.get(sub.id) : null;
+        return {
+          paperId: paper.id,
+          title: paper.title,
+          subjectName: subject?.name || 'Unknown',
+          totalMarks: paper.totalMarks,
+          isExempted,
+          marksAwarded: isExempted ? null : (evaluation?.totalMarks ?? null),
+          status: isExempted ? 'exempted' : (sub?.status || 'not_attempted'),
+        };
+      });
+
+      scheduleList.push({ scheduleNumber: sn, availableAt: availAt, papers: paperData });
+    }
+
+    res.json({
+      publication: {
+        result: publication.result,
+        isPassed: publication.isPassed,
+        totalMarksAwarded: publication.totalMarksAwarded,
+        totalMaxMarks: publication.totalMaxMarks,
+        overallPct: publication.overallPct,
+        feedback: publication.feedback,
+        publishedAt: publication.publishedAt,
+      },
+      group: { id: group.id, name: group.name, caLevel: group.caLevel },
+      schedules: scheduleList,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Attempt endpoints (/:id MUST come after all specific named routes) ────────
 
 router.post('/:id/discard', requireAuth, requireRole('student'), async (req, res, next) => {
   try {

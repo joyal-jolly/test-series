@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js';
+﻿import { supabase } from './supabase.js';
 
 // -----------------------------------------------------------------------------
 // Unified Supabase Database Operations
@@ -380,5 +380,59 @@ export const dbService = {
     const { error } = await supabase.from('contact_messages').insert(entry);
     if (error) throw new Error(error.message);
     return entry;
+  },
+
+  // ── Group Result Publications ─────────────────────────────────────────────────
+
+  async upsertGroupResultPublication({ studentId, groupId, result, feedback, totalMarksAwarded, totalMaxMarks, overallPct, publishedBy }) {
+    const id = `${studentId}_${groupId}`;
+    const entry = {
+      id,
+      studentId,
+      groupId,
+      result,
+      feedback: feedback || null,
+      isPassed: result === 'PASS',
+      totalMarksAwarded: totalMarksAwarded || 0,
+      totalMaxMarks: totalMaxMarks || 0,
+      overallPct: overallPct != null ? overallPct : null,
+      publishedAt: new Date().toISOString(),
+      publishedBy: publishedBy || null,
+    };
+    const { error } = await supabase
+      .from('group_result_publications')
+      .upsert(entry, { onConflict: 'id' });
+    if (error) throw new Error(error.message);
+    return entry;
+  },
+
+  async getGroupResultPublication(studentId, groupId) {
+    const { data, error } = await supabase
+      .from('group_result_publications')
+      .select('*')
+      .eq('studentId', studentId)
+      .eq('groupId', groupId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  async deleteGroupResultPublication(studentId, groupId) {
+    const { error } = await supabase
+      .from('group_result_publications')
+      .delete()
+      .eq('studentId', studentId)
+      .eq('groupId', groupId);
+    if (error) throw new Error(error.message);
+  },
+
+  async getPublishedResultsForStudent(studentId) {
+    const { data, error } = await supabase
+      .from('group_result_publications')
+      .select('*')
+      .eq('studentId', studentId)
+      .order('publishedAt', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data || [];
   },
 };

@@ -29,6 +29,7 @@ function LeaveExamModal({ onConfirm, onCancel, busy }) {
 const studentLinks = [
   { to: '/student', label: 'Dashboard', end: true },
   { to: '/papers', label: 'Browse papers' },
+  { to: '/student/results', label: 'Results' },
 ];
 
 function statusLabel(status) {
@@ -714,6 +715,254 @@ export function ResultPage() {
           </div>
         )}
       </div>
+    </PortalLayout>
+  );
+}
+
+// ─── Student Published Results ─────────────────────────────────────────────────────
+export function StudentResults() {
+  const [results, setResults] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedResult, setSelectedResult] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+
+  useEffect(() => {
+    api('/api/student/published-results')
+      .then((d) => { setResults(d.results || []); setLoading(false); })
+      .catch((e) => { setError(e.message); setLoading(false); });
+  }, []);
+
+  async function openDetail(result) {
+    setSelectedResult(result);
+    setDetailLoading(true);
+    setDetailError('');
+    setDetail(null);
+    try {
+      const d = await api(`/api/student/published-results/${result.groupId}`);
+      setDetail(d);
+    } catch (e) {
+      setDetailError(e.message);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  // ── Detail view ──────────────────────────────────────────────────────────────
+  if (selectedResult) {
+    const pub = detail?.publication;
+    return (
+      <PortalLayout title="Student portal" links={studentLinks}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          <button className="btn ghost" onClick={() => { setSelectedResult(null); setDetail(null); }}>← My Results</button>
+          <span className="muted" style={{ fontSize: '0.9rem' }}>/ {selectedResult.groupName}</span>
+        </div>
+
+        {detailLoading && <p className="muted">Loading details…</p>}
+        {detailError && <p className="error">{detailError}</p>}
+
+        {!detailLoading && detail && (
+          <>
+            {/* Result card */}
+            <div className="panel" style={{ marginBottom: '1.5rem', padding: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ margin: '0 0 0.25rem', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)' }}>
+                    {detail.group.caLevel}
+                  </p>
+                  <h2 style={{ margin: 0 }}>{detail.group.name}</h2>
+                  <p className="muted" style={{ margin: '0.3rem 0 0', fontSize: '0.88rem' }}>
+                    Published on {new Date(pub.publishedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+                <div style={{
+                  textAlign: 'center',
+                  padding: '1rem 1.5rem',
+                  borderRadius: '14px',
+                  background: pub.result === 'PASS' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                  border: `2px solid ${pub.result === 'PASS' ? '#22c55e' : '#ef4444'}`,
+                }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>{pub.result === 'PASS' ? '✅' : '❌'}</div>
+                  <div style={{
+                    fontSize: '1.5rem',
+                    fontWeight: 800,
+                    color: pub.result === 'PASS' ? '#16a34a' : '#dc2626',
+                    letterSpacing: '0.04em',
+                  }}>
+                    {pub.result}
+                  </div>
+                </div>
+              </div>
+
+              {pub.totalMaxMarks > 0 && (
+                <div className="stats-grid" style={{ marginTop: '1.25rem' }}>
+                  {[
+                    ['Marks Obtained', `${pub.totalMarksAwarded} / ${pub.totalMaxMarks}`],
+                    ['Overall Percentage', pub.overallPct != null ? `${pub.overallPct}%` : '—'],
+                  ].map(([label, val]) => (
+                    <div className="stat-tile" key={label}>
+                      <strong style={{ fontSize: '1.1rem' }}>{val}</strong>
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {pub.feedback && (
+                <div style={{ marginTop: '1.25rem', padding: '1rem', borderRadius: '10px', background: 'var(--accent-soft, #f8fafc)', border: '1px solid var(--border)' }}>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: '0.88rem', marginBottom: '0.35rem' }}>Admin Remarks</p>
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>{pub.feedback}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Paper-wise breakdown */}
+            <h3 style={{ marginBottom: '1rem' }}>Paper-wise Marks</h3>
+            {(detail.schedules || []).map((sched) => (
+              sched.papers.length > 0 && (
+                <div key={sched.scheduleNumber} className="panel" style={{ marginBottom: '1.25rem' }}>
+                  <div className="panel-head">
+                    <h3 style={{ margin: 0 }}>Schedule {sched.scheduleNumber}</h3>
+                    {sched.availableAt && (
+                      <span className="muted" style={{ fontSize: '0.82rem' }}>
+                        {new Date(sched.availableAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Subject</th>
+                        <th>Paper</th>
+                        <th style={{ textAlign: 'center' }}>Status</th>
+                        <th style={{ textAlign: 'right' }}>Max Marks</th>
+                        <th style={{ textAlign: 'right' }}>Marks Obtained</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sched.papers.map((paper) => {
+                        const pct = paper.marksAwarded != null && paper.totalMarks
+                          ? Math.round((paper.marksAwarded / paper.totalMarks) * 100)
+                          : null;
+                        return (
+                          <tr key={paper.paperId}>
+                            <td><strong style={{ fontSize: '0.92rem' }}>{paper.subjectName}</strong></td>
+                            <td><span style={{ fontWeight: 500 }}>{paper.title}</span></td>
+                            <td style={{ textAlign: 'center' }}>
+                              {paper.isExempted ? (
+                                <span className="pill info" style={{ fontSize: '0.75rem' }}>Exempted</span>
+                              ) : (
+                                <span className="pill published" style={{ fontSize: '0.75rem' }}>Evaluated</span>
+                              )}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {paper.isExempted ? <span className="muted">—</span> : paper.totalMarks}
+                            </td>
+                            <td style={{ textAlign: 'right' }}>
+                              {paper.isExempted ? (
+                                <span className="muted" style={{ fontStyle: 'italic', fontSize: '0.85rem' }}>Exempted</span>
+                              ) : paper.marksAwarded != null ? (
+                                <span style={{ fontWeight: 700, color: pct >= 60 ? 'var(--ok)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)' }}>
+                                  {paper.marksAwarded}
+                                  <span className="muted" style={{ fontWeight: 400, fontSize: '0.78rem', marginLeft: '0.3rem' }}>({pct}%)</span>
+                                </span>
+                              ) : (
+                                <span className="muted">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ))}
+          </>
+        )}
+      </PortalLayout>
+    );
+  }
+
+  // ── List view ────────────────────────────────────────────────────────────────
+  return (
+    <PortalLayout title="Student portal" links={studentLinks}>
+      <div className="panel-head" style={{ marginBottom: '1.25rem' }}>
+        <div>
+          <h2 style={{ margin: 0 }}>My Results</h2>
+          <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.88rem' }}>
+            Officially published results from the academy.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="muted">Loading results…</p>
+      ) : error ? (
+        <p className="error">{error}</p>
+      ) : results.length === 0 ? (
+        <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
+          <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📋</p>
+          <h3 style={{ margin: '0 0 0.5rem' }}>No results published yet</h3>
+          <p className="muted" style={{ fontSize: '0.9rem' }}>
+            Your results have not been published yet. Please check again later.
+          </p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          {results.map((r) => (
+            <div
+              key={r.groupId}
+              className="panel"
+              style={{
+                padding: '1.25rem 1.5rem',
+                cursor: 'pointer',
+                borderLeft: `4px solid ${r.result === 'PASS' ? '#22c55e' : '#ef4444'}`,
+                transition: 'box-shadow 0.18s, transform 0.18s',
+              }}
+              onClick={() => openDetail(r)}
+              onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.transform = ''; }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.05rem' }}>{r.groupName}</h3>
+                  <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.82rem' }}>
+                    {r.caLevel} · Published {new Date(r.publishedAt).toLocaleDateString()}
+                  </p>
+                  {r.feedback && (
+                    <p className="muted" style={{ margin: '0.4rem 0 0', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                      “{r.feedback}”
+                    </p>
+                  )}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  {r.totalMaxMarks > 0 && (
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>{r.totalMarksAwarded} / {r.totalMaxMarks}</div>
+                      <div className="muted" style={{ fontSize: '0.75rem' }}>{r.overallPct != null ? `${r.overallPct}%` : ''}</div>
+                    </div>
+                  )}
+                  <span style={{
+                    fontSize: '1rem',
+                    fontWeight: 800,
+                    padding: '0.4rem 1rem',
+                    borderRadius: '8px',
+                    background: r.result === 'PASS' ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                    color: r.result === 'PASS' ? '#16a34a' : '#dc2626',
+                    letterSpacing: '0.04em',
+                  }}>
+                    {r.result}
+                  </span>
+                  <span style={{ fontSize: '1rem', color: '#9ca3af' }}>›</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </PortalLayout>
   );
 }

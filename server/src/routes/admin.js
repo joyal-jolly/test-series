@@ -924,5 +924,324 @@ router.get('/insights', async (_req, res, next) => {
   }
 });
 
-export default router;
 
+// ── Publish Result Routes ──────────────────────────────────────────────────────
+
+// GET /api/admin/publish-result/groups
+// Returns all groups with eligible students (all schedules released, all non-exempted papers evaluated)
+router.get('/publish-result/groups', async (req, res, next) => {
+  try {
+    const { supabase } = await import('../supabase.js');
+    const now = new Date().toISOString();
+
+    const [groups, allPapers, allSchedules, submissions, evaluations, users] = await Promise.all([
+      dbService.getQuestionPaperGroups(),
+      dbService.getQuestionPapers(),
+      dbService.getAllSchedules(),
+      dbService.getSubmissions(),
+      dbService.getEvaluations(),
+      dbService.getUsers(),
+    ]);
+
+    // Fetch all exemptions
+    const { data: allExemptions } = await supabase.from('student_exemptions').select('*');
+    const exemptions = allExemptions || [];
+
+    const evalMap = new Map(evaluations.map((e) => [e.submissionId, e]));
+    const students = users.filter((u) => u.role === 'student');
+
+    const scheduleByGroup = new Map();
+    for (const sched of allSchedules) {
+      if (!scheduleByGroup.has(sched.groupId)) scheduleByGroup.set(sched.groupId, new Map());
+      scheduleByGroup.get(sched.groupId).set(sched.scheduleNumber, sched);
+    }
+
+    const enriched = await Promise.all(groups.map(async (g) => {
+      const groupPapers = allPapers.filter((p) => p.groupId === g.id);
+      const groupSchedMap = scheduleByGroup.get(g.id) || new Map();
+      const eligibleStudents = [];
+
+      for (const student of students) {
+        const exemptedSubjectIds = new Set(
+          exemptions
+            .filter((e) => e.studentId === student.id && e.groupId === g.id)
+            .map((e) => e.subjectId)
+        );
+
+        const studentSubs = submissions.filter(
+          (s) => s.studentId === student.id && groupPapers.some((p) => p.id === s.questionPaperId)
+        );
+        const subByPaperId = new Map(studentSubs.map((s) => [s.questionPaperId, s]));
+
+        let isEligible = true;
+        let completedSchedules = 0;
+        let totalRequired = 0;
+        let totalReviewed = 0;
+
+        for (let sn = 1; sn <= g.numSchedules; sn++) {
+          const schedPapers = groupPapers.filter((p) => p.scheduleNumber === sn);
+          if (schedPapers.length === 0) continue;
+
+          const schedRecord = groupSchedMap.get(sn);
+          const availAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+          const isReleased = !availAt || new Date(availAt) <= new Date(now);
+
+          if (!isReleased) { isEligible = false; break; }
+
+          const requiredPapers = schedPapers.filter((p) => !exemptedSubjectIds.has(p.subjectId));
+          totalRequired += requiredPapers.length;
+
+          let schedCompleted = true;
+          for (const paper of requiredPapers) {
+            const sub = subByPaperId.get(paper.id);
+            if (!sub) { isEligible = false; schedCompleted = false; break; }
+            const ev = evalMap.get(sub.id);
+            if (!ev || ev.status !== 'completed' || sub.status !== 'evaluated') {
+              isEligible = false; schedCompleted = false; break;
+            }
+            totalReviewed++;
+          }
+          if (!isEligible) break;
+          if (schedCompleted && requiredPapers.length > 0) completedSchedules++;
+        }
+
+        if (!isEligible || totalRequired === 0) continue;
+
+        const pub = await dbService.getGroupResultPublication(student.id, g.id).catch(() => null);
+
+        eligibleStudents.push({
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          phone: student.profile?.phone || null,
+          totalRequiredPapers: totalRequired,
+          papersReviewed: totalReviewed,
+          completedSchedules,
+          totalSchedules: g.numSchedules,
+          isPublished: !!pub,
+          result: pub?.result || null,
+          publishedAt: pub?.publishedAt || null,
+          feedback: pub?.feedback || null,
+        });
+      }
+
+      return {
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        caLevel: g.caLevel,
+        numSchedules: g.numSchedules,
+        eligibleStudents,
+      };
+    }));
+
+    res.json({ groups: enriched });
+  } catch (err) {
+    next(err);
+  }
+});
+
+
+// GET /api/admin/publish-result/groups/:groupId/students/:studentId
+// Returns per-schedule per-paper marks for a student in a group (with exemptions)
+router.get('/publish-result/groups/:groupId/students/:studentId', async (req, res, next) => {
+  try {
+    const { supabase } = await import('../supabase.js');
+    const { groupId, studentId } = req.params;
+    const now = new Date().toISOString();
+
+    const [group, groupPapers, subjects, allSchedules, studentSubs, evaluations, student] = await Promise.all([
+      dbService.getQuestionPaperGroupById(groupId),
+      dbService.getQuestionPapersByGroup(groupId),
+      dbService.getSubjects(),
+      dbService.getSchedulesByGroup(groupId),
+      dbService.getSubmissionsByStudent(studentId),
+      dbService.getEvaluations(),
+      dbService.getUserById(studentId),
+    ]);
+
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!student || student.role !== 'student') return res.status(404).json({ error: 'Student not found' });
+
+    const { data: exemptionRows } = await supabase
+      .from('student_exemptions')
+      .select('*')
+      .eq('studentId', studentId)
+      .eq('groupId', groupId);
+    const exemptedSubjectIds = new Set((exemptionRows || []).map((e) => e.subjectId));
+
+    const subjectMap = new Map(subjects.map((s) => [s.id, s]));
+    const evalMap = new Map(evaluations.map((e) => [e.submissionId, e]));
+    const subByPaperId = new Map(studentSubs.map((s) => [s.questionPaperId, s]));
+    const schedMap = new Map(allSchedules.map((s) => [s.scheduleNumber, s]));
+
+    let totalMarksAwarded = 0;
+    let totalMaxMarks = 0;
+    let totalEvaluated = 0;
+    let totalRequired = 0;
+    let canPublish = true;
+
+    const scheduleList = [];
+    for (let sn = 1; sn <= group.numSchedules; sn++) {
+      const schedPapers = groupPapers.filter((p) => p.scheduleNumber === sn);
+      if (schedPapers.length === 0) continue;
+
+      const schedRecord = schedMap.get(sn);
+      const availAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+      const isReleased = !availAt || new Date(availAt) <= new Date(now);
+      if (!isReleased) canPublish = false;
+
+      const paperData = schedPapers.map((paper) => {
+        const isExempted = exemptedSubjectIds.has(paper.subjectId);
+        const subject = subjectMap.get(paper.subjectId);
+        const sub = subByPaperId.get(paper.id);
+        const evaluation = sub ? evalMap.get(sub.id) : null;
+
+        if (!isExempted) {
+          totalRequired++;
+          if (evaluation && evaluation.status === 'completed' && sub?.status === 'evaluated') {
+            totalMarksAwarded += evaluation.totalMarks || 0;
+            totalMaxMarks += paper.totalMarks || 0;
+            totalEvaluated++;
+          } else {
+            canPublish = false;
+          }
+        }
+
+        return {
+          paperId: paper.id,
+          title: paper.title,
+          subjectName: subject?.name || 'Unknown',
+          subjectId: paper.subjectId,
+          caLevel: paper.caLevel,
+          paperType: paper.paperType,
+          totalMarks: paper.totalMarks,
+          isExempted,
+          status: isExempted ? 'exempted' : (sub?.status || 'not_attempted'),
+          submittedAt: sub?.submittedAt || null,
+          marksAwarded: isExempted ? null : (evaluation?.totalMarks ?? null),
+          evaluatedAt: evaluation?.evaluatedAt || null,
+          feedback: evaluation?.feedback || null,
+        };
+      });
+
+      scheduleList.push({
+        scheduleNumber: sn,
+        availableAt: availAt,
+        isReleased,
+        papers: paperData,
+      });
+    }
+
+    const overallPct = totalMaxMarks > 0
+      ? Math.round((totalMarksAwarded / totalMaxMarks) * 100)
+      : null;
+
+    if (totalRequired === 0) canPublish = false;
+
+    const publication = await dbService.getGroupResultPublication(studentId, groupId).catch(() => null);
+
+    res.json({
+      student: { id: student.id, name: student.name, email: student.email, phone: student.profile?.phone || null },
+      group: { id: group.id, name: group.name, caLevel: group.caLevel },
+      schedules: scheduleList,
+      summary: { totalRequired, totalEvaluated, totalMarksAwarded, totalMaxMarks, overallPct, canPublish },
+      publication: publication || null,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/publish-result/groups/:groupId/students/:studentId/publish
+router.post('/publish-result/groups/:groupId/students/:studentId/publish', async (req, res, next) => {
+  try {
+    const { supabase } = await import('../supabase.js');
+    const { groupId, studentId } = req.params;
+    const { finalStatus, adminRemarks } = req.body;
+    const now = new Date().toISOString();
+
+    if (!['PASS', 'FAIL'].includes(finalStatus)) {
+      return res.status(400).json({ error: 'finalStatus must be PASS or FAIL' });
+    }
+
+    const [group, groupPapers, allSchedules, studentSubs, evaluations, student] = await Promise.all([
+      dbService.getQuestionPaperGroupById(groupId),
+      dbService.getQuestionPapersByGroup(groupId),
+      dbService.getSchedulesByGroup(groupId),
+      dbService.getSubmissionsByStudent(studentId),
+      dbService.getEvaluations(),
+      dbService.getUserById(studentId),
+    ]);
+
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!student || student.role !== 'student') return res.status(404).json({ error: 'Student not found' });
+
+    const { data: exemptionRows } = await supabase
+      .from('student_exemptions')
+      .select('*')
+      .eq('studentId', studentId)
+      .eq('groupId', groupId);
+    const exemptedSubjectIds = new Set((exemptionRows || []).map((e) => e.subjectId));
+
+    const evalMap = new Map(evaluations.map((e) => [e.submissionId, e]));
+    const subByPaperId = new Map(studentSubs.map((s) => [s.questionPaperId, s]));
+    const schedMap = new Map(allSchedules.map((s) => [s.scheduleNumber, s]));
+
+    let totalMarksAwarded = 0;
+    let totalMaxMarks = 0;
+    let totalRequired = 0;
+
+    for (let sn = 1; sn <= group.numSchedules; sn++) {
+      const schedPapers = groupPapers.filter((p) => p.scheduleNumber === sn);
+      if (schedPapers.length === 0) continue;
+
+      const schedRecord = schedMap.get(sn);
+      const availAt = schedRecord?.availableAt || schedPapers[0]?.availableAt || null;
+      const isReleased = !availAt || new Date(availAt) <= new Date(now);
+      if (!isReleased) return res.status(400).json({ error: `Schedule ${sn} has not been released yet` });
+
+      for (const paper of schedPapers) {
+        if (exemptedSubjectIds.has(paper.subjectId)) continue;
+        totalRequired++;
+        const sub = subByPaperId.get(paper.id);
+        if (!sub) return res.status(400).json({ error: `Student has not submitted paper: ${paper.title}` });
+        const ev = evalMap.get(sub.id);
+        if (!ev || ev.status !== 'completed' || sub.status !== 'evaluated') {
+          return res.status(400).json({ error: `Paper not yet evaluated: ${paper.title}` });
+        }
+        totalMarksAwarded += ev.totalMarks || 0;
+        totalMaxMarks += paper.totalMarks || 0;
+      }
+    }
+
+    if (totalRequired === 0) return res.status(400).json({ error: 'No required papers found for this student' });
+
+    const overallPct = totalMaxMarks > 0 ? Math.round((totalMarksAwarded / totalMaxMarks) * 100) : null;
+
+    const pub = await dbService.upsertGroupResultPublication({
+      studentId, groupId,
+      result: finalStatus,
+      feedback: adminRemarks || null,
+      totalMarksAwarded, totalMaxMarks, overallPct,
+      publishedBy: req.user?.id || null,
+    });
+
+    res.json({ success: true, publication: pub });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/admin/publish-result/groups/:groupId/students/:studentId/publish
+router.delete('/publish-result/groups/:groupId/students/:studentId/publish', async (req, res, next) => {
+  try {
+    const { groupId, studentId } = req.params;
+    await dbService.deleteGroupResultPublication(studentId, groupId);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;
