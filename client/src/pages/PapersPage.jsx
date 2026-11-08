@@ -44,7 +44,7 @@ function PurchaseModal({ groupName, onConfirm, onCancel, busy }) {
           🎓 Free Access
         </div>
         <h2 className="modal-title">Confirm Enrollment</h2>
-        <p style={{ textAlign: 'center', color: '#475569', lineHeight: 1.6, margin: '0 0 1.5rem' }}>
+        <p style={{ textAlign: 'center', color: 'var(--ink-soft)', lineHeight: 1.6, margin: '0 0 1.5rem' }}>
           Purchase <strong>"{groupName}"</strong> for <strong>free</strong>?<br />
           Once enrolled you can attempt all question papers in this series.
         </p>
@@ -198,32 +198,70 @@ export default function PapersPage() {
           />
         )}
 
-        <div className="section-head">
-          <h1>Question paper library</h1>
-          <p>Select a question paper group below to view its schedules and attempt uploaded question papers.</p>
+        <div className="papers-header">
+          <div className="papers-eyebrow-pill">
+            <span className="papers-eyebrow-dot" aria-hidden="true" />
+            <span>MENTAURA CA CAMPUS</span>
+            <span className="dot">•</span>
+            <span>VAZHAKULAM</span>
+          </div>
+          <h1 className="papers-main-title">Question Paper Library</h1>
+         
+          <p className="papers-lede">
+            Select a question paper group below to view its schedules and attempt uploaded question papers with faculty evaluation.
+          </p>
         </div>
 
-        <div className="filters">
-          <input
-            placeholder="Search group, title, subject…"
-            value={filters.q}
-            onChange={(e) => setFilters({ ...filters, q: e.target.value })}
-          />
-          <select value={filters.caLevel} onChange={(e) => setFilters({ ...filters, caLevel: e.target.value })}>
-            <option value="">All levels</option>
-            <option>Intermediate</option>
-            <option>Final</option>
-          </select>
-          <select value={filters.subjectId} onChange={(e) => setFilters({ ...filters, subjectId: e.target.value })}>
-            <option value="">All subjects</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+        <div className="papers-filter-row">
+          <div className="papers-search-wrap">
+            <svg
+              className="papers-search-icon"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search group, title, subject…"
+              value={filters.q}
+              onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+              className="papers-search-input"
+            />
+          </div>
+          <div className="papers-select-group">
+            <select
+              value={filters.caLevel}
+              onChange={(e) => setFilters({ ...filters, caLevel: e.target.value })}
+              className="papers-select"
+            >
+              <option value="">All levels</option>
+              <option value="Intermediate">Intermediate</option>
+              <option value="Final">Final</option>
+            </select>
+            <select
+              value={filters.subjectId}
+              onChange={(e) => setFilters({ ...filters, subjectId: e.target.value })}
+              className="papers-select"
+            >
+              <option value="">All subjects</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {loading ? (
-          <p className="muted">Loading question paper groups…</p>
+          <p className="muted" style={{ textAlign: 'center', padding: '3rem 0' }}>Loading question paper groups…</p>
         ) : fetchError ? (
           <div className="panel" style={{ textAlign: 'center', padding: '3rem' }}>
             <p className="error">{fetchError}</p>
@@ -236,7 +274,7 @@ export default function PapersPage() {
             <p className="muted">No question paper groups match your filters.</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))', gap: '1.35rem' }}>
+          <div className="papers-cards-grid">
             {filteredGroups.map((g) => {
               const expectedSubjects = g.numSubjectsPerSchedule || 3;
               const enrolled = isStudent && enrolledIds.has(g.id);
@@ -244,32 +282,7 @@ export default function PapersPage() {
               return (
                 <div
                   key={g.id}
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    background: '#ffffff',
-                    border: enrolled ? '1.5px solid #86efac' : '1px solid #e2e8f0',
-                    borderRadius: '14px',
-                    padding: '1.35rem 1.4rem',
-                    textDecoration: 'none',
-                    boxShadow: enrolled ? '0 2px 12px rgba(21,128,61,0.10)' : '0 2px 8px rgba(0,0,0,0.04)',
-                    transition: 'all 0.22s cubic-bezier(0.4,0,0.2,1)',
-                    cursor: 'pointer',
-                    position: 'relative',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-3px)';
-                    e.currentTarget.style.borderColor = enrolled ? '#4ade80' : '#6366f1';
-                    e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(99,102,241,0.16)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.borderColor = enrolled ? '#86efac' : '#e2e8f0';
-                    e.currentTarget.style.boxShadow = enrolled
-                      ? '0 2px 12px rgba(21,128,61,0.10)'
-                      : '0 2px 8px rgba(0,0,0,0.04)';
-                  }}
+                  className={`paper-group-card ${enrolled ? 'enrolled' : ''}`}
                   onClick={() => {
                     if (!user) {
                       navigate(`/login?next=/groups/${g.id}`);
@@ -278,78 +291,53 @@ export default function PapersPage() {
                     navigate(`/groups/${g.id}`);
                   }}
                 >
-                  <div>
-                    {/* Header row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
-                          <span
-                            className="pill"
-                            style={{
-                              fontSize: '0.68rem',
-                              fontWeight: 700,
-                              background: g.caLevel === 'Final' ? '#fdf2f8' : '#eff6ff',
-                              color: g.caLevel === 'Final' ? '#be185d' : '#1d4ed8',
-                              border: g.caLevel === 'Final' ? '1px solid #fbcfe8' : '1px solid #bfdbfe',
-                              borderRadius: '6px',
-                              padding: '0.15rem 0.5rem',
-                            }}
-                          >
-                            {g.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
-                          </span>
-                        </div>
-                        <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 700, color: '#0f172a', lineHeight: 1.3, letterSpacing: '-0.01em', wordBreak: 'break-word' }}>
-                          {g.name}
-                        </h3>
-                        <div style={{ marginTop: '0.3rem', fontSize: '0.66rem', fontWeight: 500, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {g.numSchedules} Schedules · {expectedSubjects} Subjects per Schedule
-                        </div>
-                      </div>
+                  <div className="paper-card-body">
+                    {/* Header row with badges */}
+                    <div className="paper-card-head">
+                      <span className={`paper-level-badge ${g.caLevel === 'Final' ? 'final' : 'intermediate'}`}>
+                        {g.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
+                      </span>
 
-                      {/* Price badges (non-interactive) */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, pointerEvents: 'none' }}>
-                        <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#f1f5f9', border: '1.5px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 700, textDecoration: 'line-through', userSelect: 'none' }} title="Original Price: 100 Rs">
-                          100 Rs
-                        </div>
-                        <div style={{ width: 54, height: 32, borderRadius: 999, background: '#dcfce7', color: '#1aa34d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.02em', userSelect: 'none' }}>
-                          Free
-                        </div>
+                      {/* Price badges */}
+                      <div className="paper-pricing">
+                        <span className="paper-original-price">100 Rs</span>
+                        <span className="paper-free-badge">FREE</span>
                       </div>
                     </div>
 
-                    {/* Description */}
+                    <h3 className="paper-group-name">{g.name}</h3>
+                    <div className="paper-group-meta">
+                      {g.numSchedules} Schedules · {expectedSubjects} Subjects per Schedule
+                    </div>
+
                     {g.description && (
-                      <p className="muted" style={{ margin: '0.65rem 0 0', fontSize: '0.83rem', lineHeight: 1.45, color: '#64748b', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      <p className="paper-group-description">
                         {g.description}
                       </p>
                     )}
                   </div>
 
                   {/* Bottom CTA */}
-                  <div style={{ marginTop: '1.25rem', paddingTop: '0.85rem', borderTop: '1px solid #f1f5f9' }}>
+                  <div className="paper-card-action">
                     {enrolled ? (
-                      /* Already enrolled → Attempt */
-                      <div
-                        style={{ width: '100%', background: 'linear-gradient(135deg,#15803d,#16a34a)', color: '#fff', borderRadius: '10px', padding: '0.58rem 1rem', fontSize: '0.88rem', fontWeight: 700, textAlign: 'center', boxShadow: '0 2px 8px rgba(21,128,61,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', cursor: 'pointer' }}
+                      <button
+                        type="button"
+                        className="paper-attempt-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (!user) {
-                            navigate(`/login?next=/groups/${g.id}`);
-                            return;
-                          }
                           navigate(`/groups/${g.id}`);
                         }}
                       >
                         Attempt →
-                      </div>
+                      </button>
                     ) : (
-                      /* Not enrolled → Purchase This */
-                      <div
-                        style={{ width: '100%', background: 'linear-gradient(135deg,#110e4a,#4c4c4e)', color: '#fff', borderRadius: '10px', padding: '0.58rem 1rem', fontSize: '0.88rem', fontWeight: 700, textAlign: 'center', boxShadow: '0 2px 8px rgba(79,70,229,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', cursor: 'pointer' }}
+                      <button
+                        type="button"
+                        className="paper-purchase-btn"
                         onClick={(e) => handlePurchaseClick(e, g)}
                       >
-                        Purchase
-                      </div>
+                        Purchase →
+                      </button>
                     )}
                   </div>
                 </div>

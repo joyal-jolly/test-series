@@ -518,15 +518,15 @@ export default function GroupDetailPage() {
         )}
 
         {/* ── Breadcrumb ── */}
-        <div style={{ marginBottom: '1.25rem' }}>
-          <Link to="/papers" style={{ color: '#4f46e5', fontWeight: 600, fontSize: '0.92rem', textDecoration: 'none' }}>
+        <div className="group-detail-breadcrumb">
+          <Link to="/papers" className="group-detail-back-link">
             ← Back to Question Paper Library
           </Link>
         </div>
 
         {/* ── Group Hero ── */}
-        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '2rem', boxShadow: '0 4px 20px rgba(0,0,0,0.04)', marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.25rem' }}>
+        <div className="group-detail-hero">
+          <div className="group-detail-hero-content">
             <div style={{ maxWidth: '750px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                 <span
@@ -544,8 +544,8 @@ export default function GroupDetailPage() {
                   {group.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
                 </span>
               </div>
-              <h1 style={{ margin: 0, fontSize: '2.1rem', fontWeight: 800, color: '#0a0a0a' }}>{group.name}</h1>
-              <div style={{ fontSize: '1.05rem', fontWeight: 600, color: '#545363', marginTop: '0.4rem' }}>
+              <h1 className="group-detail-title">{group.name}</h1>
+              <div className="group-detail-subtitle">
                 {group.numSchedules} Schedules · {expectedSubjects} Subjects per Schedule
               </div>
               {group.description && (
@@ -558,7 +558,7 @@ export default function GroupDetailPage() {
             {/* Price + exemption / enrollment badge */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.65rem', minWidth: 160 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ width: 46, height: 46, borderRadius: '50%', background: '#f1f5f9', border: '1.5px solid #cbd5e1', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.74rem', fontWeight: 700, textDecoration: 'line-through', userSelect: 'none' }}>100 Rs</div>
+                <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'var(--accent-soft)', border: '1.5px solid var(--line)', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.74rem', fontWeight: 700, textDecoration: 'line-through', userSelect: 'none' }}>100 Rs</div>
                 <div style={{ width: 60, height: 34, borderRadius: 999, background: '#dcfce7', border: '1.5px solid #86efac', color: '#15803d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', userSelect: 'none' }}>Free</div>
               </div>
               {isStudent && enrolled && (
@@ -575,7 +575,6 @@ export default function GroupDetailPage() {
                     fontWeight: 700,
                     fontSize: '0.85rem',
                     cursor: 'pointer',
-                    boxShadow: '0 2px 8px rgba(79,70,229,0.25)',
                     whiteSpace: 'nowrap',
                   }}
                   title="Add or manage subject exemptions"
@@ -586,7 +585,7 @@ export default function GroupDetailPage() {
                 </button>
               )}
               {isStudent && !enrolled && (
-                <Link to="/papers" style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 600, textDecoration: 'none' }}>
+                <Link to="/papers" style={{ fontSize: '0.82rem', color: 'var(--brand-copper)', fontWeight: 600, textDecoration: 'none' }}>
                   ← Purchase from library
                 </Link>
               )}
@@ -596,7 +595,7 @@ export default function GroupDetailPage() {
 
         {/* ── Section Title ── */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.35rem', color: '#1e293b' }}>Schedules &amp; Question Papers</h2>
+          <h2 style={{ margin: 0, fontSize: '1.35rem', color: 'var(--ink)', fontFamily: 'var(--font-serif)' }}>Schedules &amp; Question Papers</h2>
         </div>
 
         {error && <p className="error" style={{ marginBottom: '1rem' }}>{error}</p>}
@@ -610,22 +609,22 @@ export default function GroupDetailPage() {
 
             if (hasPapers) {
               return (
-                <div key={s.scheduleNumber} style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: '14px', boxShadow: '0 8px 30px rgba(99,102,241,0.12)', overflow: 'hidden' }}>
+                <div key={s.scheduleNumber} className="group-schedule-card">
                   {/* Header */}
-                  <div style={{ padding: '1rem 1.5rem', background: 'linear-gradient(135deg,#eef2ff,#e0e7ff)', borderBottom: '2px solid #c7d2fe', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                  <div className="group-schedule-head">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                      <span style={{ background: '#08071c', color: '#fff', fontWeight: 800, fontSize: '0.9rem', padding: '0.35rem 0.8rem', borderRadius: '8px' }}>
+                      <span className="group-schedule-badge">
                         Schedule {s.scheduleNumber}
                       </span>
                       <div>
-                        <strong style={{ fontSize: '1.05rem', color: '#1e1b4b' }}>
+                        <strong className="group-schedule-title">
                           {papers.length} {papers.length === 1 ? 'Subject Question Paper' : 'Subject Question Papers'} Uploaded
                         </strong>
-                        <span style={{ fontSize: '0.82rem', color: '#4338ca', display: 'block' }}>Target: {expectedSubjects} Subjects</span>
+                        <span className="group-schedule-target">Target: {expectedSubjects} Subjects</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                      <span style={{ fontSize: '0.85rem', color: '#3730a3', fontWeight: 600 }}>Scheduled Access:</span>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--ink-soft)', fontWeight: 600 }}>Scheduled Access:</span>
                       {isAvailable ? (
                         <span className="pill published" style={{ background: '#dcfce7', color: '#15803d', border: '1px solid #86efac', fontWeight: 700, fontSize: '0.82rem', padding: '0.35rem 0.75rem' }}>● Available Now</span>
                       ) : (
@@ -637,23 +636,23 @@ export default function GroupDetailPage() {
                   </div>
 
                   {/* Papers table */}
-                  <div style={{ padding: '1rem 1.5rem', overflowX: 'auto' }}>
-                    <table className="data-table" style={{ background: '#fff', width: '100%' }}>
+                  <div className="group-schedule-table-wrap">
+                    <table className="data-table group-schedule-table">
                       <tbody>
                         {papers.map((p) => (
                           <tr key={p.id}>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
-                                <strong style={{ fontSize: '0.98rem', color: '#0f172a' }}>{p.subjectName}</strong>
+                                <strong style={{ fontSize: '0.98rem', color: 'var(--ink)' }}>{p.subjectName}</strong>
                                 {exemptedSubjectIds.has(p.subjectId) && (
                                   <span
                                     className="pill"
                                     style={{
-                                      background: '#ede9fe',
-                                      color: '#6366f1',
+                                      background: 'var(--accent-soft)',
+                                      color: 'var(--accent)',
                                       fontSize: '0.72rem',
                                       fontWeight: 700,
-                                      border: '1px solid #c7d2fe',
+                                      border: '1px solid var(--line)',
                                     }}
                                   >
                                     Exemption
@@ -663,18 +662,16 @@ export default function GroupDetailPage() {
                               <div className="muted" style={{ fontSize: '0.78rem' }}>{p.caLevel}</div>
                             </td>
                             <td>
-                              <Link to={`/papers/${p.id}`} style={{ fontWeight: 600, color: '#1e293b', textDecoration: 'none' }}
-                                onMouseEnter={(e) => { e.currentTarget.style.color = '#4f46e5'; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.color = '#1e293b'; }}>
+                              <Link to={`/papers/${p.id}`} className="group-paper-title-link">
                                 {p.title}
                               </Link>
                               {p.chapter && <div className="muted" style={{ fontSize: '0.78rem' }}>{p.chapter}</div>}
                             </td>
                             <td>
-                              <span className="pill" style={{ background: '#ede9fe', color: '#000', fontWeight: 600, fontSize: '0.75rem', border: '1px solid #ddd6fe' }}>{p.paperType}</span>
+                              <span className="pill" style={{ background: 'var(--accent-soft)', color: 'var(--ink)', fontWeight: 600, fontSize: '0.75rem', border: '1px solid var(--line)' }}>{p.paperType}</span>
                             </td>
                             <td>
-                              <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#334155' }}>
+                              <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--ink-soft)' }}>
                                 {p.totalMarks} marks · {p.durationMinutes} min
                               </span>
                             </td>
@@ -702,15 +699,15 @@ export default function GroupDetailPage() {
 
             // No papers yet — dim card
             return (
-              <div key={s.scheduleNumber} style={{ border: '1px dashed #cbd5e1', borderRadius: '14px', background: '#f8fafc', opacity: 0.55, pointerEvents: 'none', userSelect: 'none', filter: 'grayscale(80%)', overflow: 'hidden' }}>
-                <div style={{ padding: '0.85rem 1.5rem', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div key={s.scheduleNumber} className="group-schedule-unreleased">
+                <div className="group-schedule-unreleased-head">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span style={{ background: '#cbd5e1', color: '#475569', fontWeight: 700, fontSize: '0.82rem', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>Schedule {s.scheduleNumber}</span>
-                    <strong style={{ fontSize: '0.92rem', color: '#64748b' }}>Pending Admin Upload</strong>
+                    <span style={{ background: 'var(--line)', color: 'var(--ink-soft)', fontWeight: 700, fontSize: '0.82rem', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>Schedule {s.scheduleNumber}</span>
+                    <strong style={{ fontSize: '0.92rem', color: 'var(--ink-soft)' }}>Pending Admin Upload</strong>
                   </div>
-                  <span className="pill" style={{ background: '#e2e8f0', color: '#64748b', fontSize: '0.75rem', fontWeight: 600 }}>🔒 Unreleased</span>
+                  <span className="pill" style={{ background: 'var(--line)', color: 'var(--ink-soft)', fontSize: '0.75rem', fontWeight: 600 }}>🔒 Unreleased</span>
                 </div>
-                <div style={{ padding: '1.25rem 1.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                <div style={{ padding: '1.25rem 1.5rem', textAlign: 'center', color: 'var(--ink-soft)' }}>
                   <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500 }}>
                     Question papers for Schedule {s.scheduleNumber} have not been uploaded yet.
                   </p>

@@ -65,15 +65,15 @@ export function PublicLayout({ children }) {
       <header className="topbar">
         <Link to="/" className="brand">
           <span className="brand-mark logo-mark">
-            <img src="/mentaura-logo.png" alt="Mentaura CA" className="brand-logo-img" />
+            <img src="/mentaura-logo.png" alt="Mentaura" className="brand-logo-img" />
           </span>
           <span className="brand-text">
-            <strong>Mentaura CA</strong>
+            <strong>Mentaura</strong>
             <em>Assessment Series</em>
           </span>
         </Link>
         <nav className="nav">
-          <NavLink to="/">Home</NavLink>
+          <NavLink to="/" end>Home</NavLink>
           <NavLink to="/papers">Question Papers</NavLink>
           <NavLink to="/about">About Campus</NavLink>
           <NavLink to="/contact">Contact &amp; Admissions</NavLink>
@@ -101,10 +101,10 @@ export function PublicLayout({ children }) {
             </>
           ) : (
             <>
-              <Link className="btn ghost" to="/login">
+              <Link className="nav-login-link" to="/login">
                 Login
               </Link>
-              <Link className="btn primary" to="/register">
+              <Link className="btn primary nav-register-btn" to="/register">
                 Register
               </Link>
             </>

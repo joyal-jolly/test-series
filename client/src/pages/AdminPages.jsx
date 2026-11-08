@@ -530,8 +530,11 @@ export function AdminPapers() {
                   {g.description && <p className="muted" style={{ margin: '0.2rem 0 0.5rem', fontSize: '0.83rem' }}>{g.description}</p>}
                   {/* Progress bar */}
                   <div style={{ marginTop: '0.45rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div style={{ flex: 1, height: '5px', borderRadius: '99px', background: '#e5e7eb', overflow: 'hidden' }}>
-                      <div style={{ width: `${progress}%`, height: '100%', borderRadius: '99px', background: progress === 100 ? '#22c55e' : '#000000ff', transition: 'width 0.4s' }} />
+                    <div className="admin-group-progress-track">
+                      <div
+                        className={`admin-group-progress-fill ${progress === 100 ? 'complete' : ''}`}
+                        style={{ width: `${progress}%` }}
+                      />
                     </div>
                     <span style={{ fontSize: '0.75rem', color: '#6b7280', whiteSpace: 'nowrap' }}>{totalUploaded}/{totalExpected} papers</span>
                   </div>
@@ -1972,17 +1975,7 @@ function InsightGroupDetail({ group, onBack, onSelectPaper, onSelectStudent }) {
                         <td className="muted" style={{ fontSize: '0.85rem' }}>{idx + 1}</td>
                         <td>
                           <button
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              padding: 0,
-                              cursor: 'pointer',
-                              fontWeight: 700,
-                              color: 'var(--accent, #6366f1)',
-                              textDecoration: 'underline',
-                              fontSize: '0.95rem',
-                              textAlign: 'left',
-                            }}
+                            className="admin-student-name-btn"
                             title="Click to view full schedule marks scorecard"
                             onClick={() => onSelectStudent(s)}
                           >
@@ -2019,8 +2012,8 @@ function InsightGroupDetail({ group, onBack, onSelectPaper, onSelectStudent }) {
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <button
-                            className="btn subtle"
-                            style={{ padding: '0.3rem 0.75rem', fontSize: '0.8rem' }}
+                            className="btn admin-action-btn"
+                            style={{ padding: '0.35rem 0.85rem', fontSize: '0.8rem' }}
                             onClick={() => onSelectStudent(s)}
                           >
                             View Scorecard →
@@ -2126,7 +2119,7 @@ function InsightStudentScorecard({ group, student, onBack }) {
   return (
     <AdminPortalLayout>
       {/* Top action bar / breadcrumbs */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+      <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           <button className="btn ghost" onClick={onBack}>← Back to {group.name}</button>
           <span className="muted" style={{ fontSize: '0.9rem' }}>/ {student.name}</span>
@@ -2136,6 +2129,12 @@ function InsightStudentScorecard({ group, student, onBack }) {
             🖨️ Print Scorecard
           </button>
         )}
+      </div>
+
+      {/* Printable Report Header (visible on print only) */}
+      <div className="print-scorecard-header">
+        <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'serif' }}>Mentaura CA Residential Campus</div>
+        <div style={{ fontSize: '1rem', color: '#555', marginTop: '0.25rem' }}>Student Performance Scorecard — {group.name}</div>
       </div>
 
       {/* Student Profile & Cumulative Performance */}
@@ -2489,9 +2488,6 @@ export function AdminPublishResults() {
                   <div className="stats-grid" style={{ margin: 0 }}>
                     {[
                       ['Required Papers', summary.totalRequired],
-                      ['Reviewed', summary.totalEvaluated],
-                      ['Marks', summary.totalMaxMarks > 0 ? `${summary.totalMarksAwarded} / ${summary.totalMaxMarks}` : '—'],
-                      ['Overall %', summary.overallPct != null ? `${summary.overallPct}%` : '—'],
                     ].map(([label, val]) => (
                       <div className="stat-tile" key={label}><strong style={{ fontSize: '1.05rem' }}>{val}</strong><span>{label}</span></div>
                     ))}
@@ -2501,7 +2497,6 @@ export function AdminPublishResults() {
 
               {isAlreadyPublished && (
                 <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', borderRadius: '8px', background: pub.result === 'PASS' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontSize: '1.5rem' }}>{pub.result === 'PASS' ? '✅' : '❌'}</span>
                   <div>
                     <div style={{ fontWeight: 700, color: pub.result === 'PASS' ? 'var(--ok, #22c55e)' : 'var(--danger, #ef4444)' }}>Published: {pub.result}</div>
                     <div className="muted" style={{ fontSize: '0.82rem' }}>Published on {new Date(pub.publishedAt).toLocaleString()}</div>
@@ -2518,9 +2513,6 @@ export function AdminPublishResults() {
                   <div className="panel-head">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                       <h3 style={{ margin: 0 }}>Schedule {sched.scheduleNumber}</h3>
-                      <span className={`pill ${sched.isReleased !== false ? 'published' : 'draft'}`} style={{ fontSize: '0.75rem' }}>
-                        {sched.isReleased !== false ? 'Released' : 'Not Released'}
-                      </span>
                     </div>
                     {sched.availableAt && (
                       <span className="muted" style={{ fontSize: '0.82rem' }}>
@@ -2533,7 +2525,6 @@ export function AdminPublishResults() {
                       <tr>
                         <th>Subject</th>
                         <th>Paper</th>
-                        <th style={{ textAlign: 'center' }}>Status</th>
                         <th style={{ textAlign: 'right' }}>Max Marks</th>
                         <th style={{ textAlign: 'right' }}>Marks Obtained</th>
                       </tr>
@@ -2549,15 +2540,6 @@ export function AdminPublishResults() {
                             <td>
                               <span style={{ fontWeight: 500 }}>{paper.title}</span>
                               {paper.paperType && <div className="muted" style={{ fontSize: '0.76rem' }}>{paper.paperType}</div>}
-                            </td>
-                            <td style={{ textAlign: 'center' }}>
-                              {paper.isExempted ? (
-                                <span className="pill info" style={{ fontSize: '0.75rem' }}>Exempted</span>
-                              ) : (
-                                <span className={`pill ${paper.status === 'evaluated' ? 'published' : ['submitted','assigned','under_review'].includes(paper.status) ? 'assigned' : 'draft'}`} style={{ fontSize: '0.75rem' }}>
-                                  {paper.status.replace(/_/g, ' ')}
-                                </span>
-                              )}
                             </td>
                             <td style={{ textAlign: 'right' }}>
                               {paper.isExempted ? <span className="muted">—</span> : paper.totalMarks}
@@ -2622,7 +2604,6 @@ export function AdminPublishResults() {
                           onChange={(e) => { setFinalResult(e.target.value); setPublishError(''); }}
                           style={{ accentColor: opt === 'PASS' ? '#22c55e' : '#ef4444' }}
                         />
-                        <span style={{ fontSize: '1.3rem' }}>{opt === 'PASS' ? '✅' : '❌'}</span>
                         {opt}
                       </label>
                     ))}
@@ -2634,7 +2615,7 @@ export function AdminPublishResults() {
                     <textarea
                       value={adminRemarks}
                       onChange={(e) => setAdminRemarks(e.target.value)}
-                      placeholder="e.g. Good performance across all subjects. Passed comfortably."
+                      placeholder="Remarks"
                       rows={3}
                       style={{
                         display: 'block',
@@ -2642,12 +2623,13 @@ export function AdminPublishResults() {
                         marginTop: '0.5rem',
                         padding: '0.7rem 0.9rem',
                         borderRadius: '8px',
-                        border: '1.5px solid var(--border, #d1d5db)',
+                        border: '1.5px solid #22c55e',
                         fontFamily: 'inherit',
                         fontSize: '0.9rem',
                         resize: 'vertical',
-                        background: 'var(--surface, #fff)',
+                        background: 'rgba(34, 197, 94, 0.04)',
                         color: 'inherit',
+                        outlineColor: '#22c55e',
                         boxSizing: 'border-box',
                       }}
                     />
@@ -2656,7 +2638,7 @@ export function AdminPublishResults() {
                   {publishError && <p className="error" style={{ marginBottom: '0.75rem' }}>{publishError}</p>}
                   {publishSuccess && (
                     <div style={{ marginBottom: '0.75rem', padding: '0.75rem 1rem', borderRadius: '8px', background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontWeight: 600 }}>
-                      ✅ Result published successfully!
+                       Result published successfully!
                     </div>
                   )}
 
@@ -2763,8 +2745,8 @@ export function AdminPublishResults() {
                 <th>Group</th>
                 <th style={{ textAlign: 'center' }}>Schedules</th>
                 <th style={{ textAlign: 'center' }}>Required Papers</th>
-                <th style={{ textAlign: 'center' }}>Reviewed</th>
                 <th style={{ textAlign: 'center' }}>Publication Status</th>
+                <th style={{ textAlign: 'center' }}>Admin Remarks</th>
                 <th style={{ textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -2784,23 +2766,23 @@ export function AdminPublishResults() {
                   </td>
                   <td style={{ textAlign: 'center' }}>{s.totalRequiredPapers}</td>
                   <td style={{ textAlign: 'center' }}>
-                    <span className={`pill ${s.papersReviewed === s.totalRequiredPapers ? 'published' : 'assigned'}`} style={{ fontSize: '0.78rem' }}>
-                      {s.papersReviewed} / {s.totalRequiredPapers}
-                    </span>
-                  </td>
-                  <td style={{ textAlign: 'center' }}>
                     {s.isPublished ? (
-                      <span className={`pill ${s.result === 'PASS' ? 'published' : 'draft'}`} style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: s.result === 'PASS' ? '#22c55e' : '#ef4444' }}>
                         {s.result}
                       </span>
                     ) : (
-                      <span className="pill" style={{ fontSize: '0.78rem', background: '#f3f4f6', color: '#6b7280' }}>Not Published</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 500, color: 'var(--muted, #94a3b8)' }}>Not Published</span>
                     )}
+                  </td>
+                  <td style={{ textAlign: 'center', maxWidth: '200px' }}>
+                    <span style={{ fontSize: '0.85rem', color: s.feedback ? 'inherit' : 'var(--muted, #94a3b8)' }}>
+                      {s.feedback || 'Remarks'}
+                    </span>
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <button
-                      className="btn subtle"
-                      style={{ padding: '0.3rem 0.75rem', fontSize: '0.82rem' }}
+                      className="btn admin-action-btn"
+                      style={{ padding: '0.35rem 0.85rem', fontSize: '0.82rem' }}
                       onClick={() => openDetail(s, s)}
                     >
                       {s.isPublished ? 'View / Edit →' : 'View Details →'}
