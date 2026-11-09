@@ -1,0 +1,14 @@
+{
+  "name": "ca-test-series-api",
+  "main": "src/worker.js",
+  "compatibility_date": "2025-09-15",
+  "compatibility_flags": ["nodejs_compat", "nodejs_compat_populate_process_env"],
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "test-series-files",
+      "preview_bucket_name": "ca-test-series-pdf-storage-dev"
+    }
+  ],
+  "vars": { "NODE_ENV": "production" }
+}
