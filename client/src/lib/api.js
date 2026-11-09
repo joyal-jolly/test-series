@@ -1,4 +1,4 @@
-const API_BASE = '';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 const DEFAULT_TTL = 60 * 1000;
 const SESSION_PREFIX = 'mentaura_api_cache::';
@@ -132,6 +132,14 @@ async function request(path, options) {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('text/html')) {
+    const text = await res.text();
+    const snippet = text.slice(0, 100).replace(/\s+/g, ' ');
+    throw new Error(
+      `API endpoint "${path}" returned HTML instead of JSON. Ensure your API URL is configured (VITE_API_URL) or that run_worker_first is set for /api/* in wrangler.jsonc. Response preview: ${snippet}`
+    );
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
@@ -196,8 +204,9 @@ export async function api(path, options = {}) {
 export function getAuthFileUrl(path) {
   if (!path) return '';
   const token = getToken();
-  if (!token) return path;
-  if (path.includes('token=')) return path;
-  const separator = path.includes('?') ? '&' : '?';
-  return `${path}${separator}token=${encodeURIComponent(token)}`;
+  const url = (API_BASE && path.startsWith('/')) ? `${API_BASE}${path}` : path;
+  if (!token) return url;
+  if (url.includes('token=')) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}token=${encodeURIComponent(token)}`;
 }

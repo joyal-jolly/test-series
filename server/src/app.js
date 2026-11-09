@@ -25,6 +25,11 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/reviewer', reviewerRoutes);
 app.use('/api/contact', contactRoutes);
 
+// Ensure any unmatched /api route returns JSON 404 rather than Express default HTML
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'API route not found' });
+});
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ error: err.message || 'Server error' });
