@@ -14,6 +14,9 @@ import { httpServerHandler } from 'cloudflare:node';
 import { env } from 'cloudflare:workers';
 import app from './app.js';
 
+for (const [key, value] of Object.entries(env)) {
+  if (typeof value === 'string') process.env[key] = value;
+}
 // Make the R2 bucket available to every route: req.app.get('r2')
 app.set('r2', env.R2_BUCKET);
 
