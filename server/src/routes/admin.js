@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { hashPassword } from '../auth.js';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
-import { storageService, isValidPdf, normalizeStorageKey } from '../storage.js';
+import { uploadFile, deleteFile, replaceFile, isValidPdf, normalizeStorageKey } from '../storage.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -520,12 +520,11 @@ router.post('/papers', (req, res, next) => {
         if (!isValidPdf(req.file.buffer)) {
           return res.status(400).json({ error: 'Uploaded file is not a valid PDF document' });
         }
+        const bucket = req.app.get('r2');
         const fileKey = `papers/${uuid()}.pdf`;
-        await storageService.uploadFile({
-          key: fileKey,
-          buffer: req.file.buffer,
-          contentType: 'application/pdf',
-          metadata: { originalName: req.file.originalname, uploadedBy: req.user.id },
+        await uploadFile(bucket, fileKey, req.file.buffer, 'application/pdf', {
+          originalName: req.file.originalname,
+          uploadedBy: req.user.id,
         });
         uploadedKey = fileKey;
       }
@@ -564,7 +563,7 @@ router.post('/papers', (req, res, next) => {
         res.status(201).json({ paper });
       } catch (insertErr) {
         if (uploadedKey) {
-          await storageService.deleteFile(uploadedKey).catch(() => {});
+          await deleteFile(req.app.get('r2'), uploadedKey).catch(() => {});
         }
         throw insertErr;
       }
@@ -619,12 +618,13 @@ router.patch('/papers/:id', (req, res, next) => {
         if (!isValidPdf(req.file.buffer)) {
           return res.status(400).json({ error: 'Uploaded file is not a valid PDF document' });
         }
+        const bucket = req.app.get('r2');
         const newKey = `papers/${uuid()}.pdf`;
         const oldKey = existing.pdfUrl ? normalizeStorageKey(existing.pdfUrl) : null;
-        replaceResult = await storageService.replaceFile({
+        replaceResult = await replaceFile(bucket, {
           oldKey,
           newKey,
-          buffer: req.file.buffer,
+          body: req.file.buffer,
           contentType: 'application/pdf',
           metadata: { originalName: req.file.originalname, uploadedBy: req.user.id },
         });
@@ -675,7 +675,7 @@ router.delete('/papers/:id', async (req, res, next) => {
     await dbService.deleteQuestionPaper(req.params.id);
 
     if (paper.pdfUrl) {
-      await storageService.deleteFile(paper.pdfUrl).catch((err) => {
+      await deleteFile(req.app.get('r2'), paper.pdfUrl).catch((err) => {
         console.warn(`[Storage] Failed to delete file for paper ${req.params.id}:`, err.message);
       });
     }

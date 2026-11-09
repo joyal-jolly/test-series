@@ -1,20 +1,32 @@
-import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
-import {
-  S3Client,
-  PutObjectCommand,
-  GetObjectCommand,
-  DeleteObjectCommand,
-  HeadObjectCommand,
-} from '@aws-sdk/client-s3';
+/**
+ * storage.js — Pure Cloudflare R2 binding helpers.
+ *
+ * Every function takes the R2 bucket binding as its first argument so there is
+ * no module-level singleton, no AWS SDK, and no local-disk fallback.
+ *
+ * In Cloudflare Workers the bucket is `env.R2_BUCKET`.
+ * In Express routes it is retrieved with `req.app.get('r2')`.
+ */
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const LOCAL_UPLOADS_DIR = path.resolve(__dirname, '../uploads');
+// ─── Key helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Validates that a buffer starts with the PDF magic bytes (%PDF-).
- * Byte values: 0x25, 0x50, 0x44, 0x46
+ * Strips leading path prefixes so callers can pass raw DB values
+ * ("/uploads/papers/x.pdf", "/api/files/papers/x.pdf", "papers/x.pdf")
+ * and always get back "papers/x.pdf".
+ */
+export function normalizeStorageKey(rawKey) {
+  if (!rawKey) return '';
+  let key = String(rawKey).trim().split('?')[0].split('#')[0];
+  if (key.startsWith('/api/files/')) key = key.slice('/api/files/'.length);
+  else if (key.startsWith('/uploads/')) key = key.slice('/uploads/'.length);
+  else if (key.startsWith('uploads/')) key = key.slice('uploads/'.length);
+  else if (key.startsWith('/')) key = key.slice(1);
+  return key;
+}
+
+/**
+ * Returns true when the first four bytes match the PDF magic number (%PDF).
  */
 export function isValidPdf(buffer) {
   if (!buffer || buffer.length < 4) return false;
@@ -26,338 +38,131 @@ export function isValidPdf(buffer) {
   );
 }
 
+// ─── R2 operations ───────────────────────────────────────────────────────────
+
 /**
- * Normalizes an object key to strip leading slashes or /uploads/ prefix.
- * e.g., "/uploads/papers/xyz.pdf" -> "papers/xyz.pdf"
- *       "/api/files/papers/xyz.pdf" -> "papers/xyz.pdf"
+ * Upload a file to R2.
+ *
+ * @param {R2Bucket} bucket          - env.R2_BUCKET
+ * @param {string}   key             - e.g. "papers/<uuid>.pdf"
+ * @param {Uint8Array|ArrayBuffer|ReadableStream} body
+ * @param {string}   [contentType]
+ * @param {Record<string,string>} [metadata]
+ * @returns {Promise<{ key: string, size: number, contentType: string }>}
  */
-export function normalizeStorageKey(rawKey) {
-  if (!rawKey) return '';
-  let key = String(rawKey).trim();
-  // Strip url queries or hash
-  key = key.split('?')[0].split('#')[0];
-  // Strip leading prefixes
-  if (key.startsWith('/api/files/')) {
-    key = key.slice('/api/files/'.length);
-  } else if (key.startsWith('/uploads/')) {
-    key = key.slice('/uploads/'.length);
-  } else if (key.startsWith('uploads/')) {
-    key = key.slice('uploads/'.length);
-  } else if (key.startsWith('/')) {
-    key = key.slice(1);
-  }
-  return key;
+export async function uploadFile(bucket, key, body, contentType = 'application/pdf', metadata = {}) {
+  const cleanKey = normalizeStorageKey(key);
+  if (!cleanKey) throw new Error('Storage key is required');
+  if (!body) throw new Error('File body is required');
+  if (!bucket) throw new Error('R2 bucket binding is not available');
+
+  await bucket.put(cleanKey, body, {
+    httpMetadata: { contentType },
+    customMetadata: metadata,
+  });
+
+  const size = body.byteLength ?? body.length ?? 0;
+  return { key: cleanKey, size, contentType };
 }
 
 /**
- * Unified Storage Service supporting Cloudflare R2 (S3-compatible API & Workers binding)
- * with graceful local filesystem fallback for development when R2 credentials are unset.
+ * Retrieve a file from R2, optionally with a byte-range.
+ *
+ * @param {R2Bucket} bucket
+ * @param {string}   key
+ * @param {{ range?: string }} [options]  range = HTTP "Range" header value
+ * @returns {Promise<{ stream: ReadableStream, contentType: string, contentLength: number, contentRange?: string, lastModified?: Date } | null>}
  */
-class StorageService {
-  constructor() {
-    this.r2Client = null;
-    this.bucketName = process.env.R2_BUCKET_NAME || '';
-    this.accountId = process.env.R2_ACCOUNT_ID || '';
-    this.workersBucket = null; // Populated in Cloudflare Workers environment via env.R2_BUCKET
+export async function getFile(bucket, key, options = {}) {
+  const cleanKey = normalizeStorageKey(key);
+  if (!cleanKey) throw new Error('Storage key is required');
+  if (!bucket) throw new Error('R2 bucket binding is not available');
 
-    this._initS3Client();
-  }
-
-  /**
-   * Set native Cloudflare Workers R2 Bucket binding if running inside Cloudflare Workers
-   */
-  setWorkersBinding(bucket) {
-    this.workersBucket = bucket;
-  }
-
-  _initS3Client() {
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const bucketName = process.env.R2_BUCKET_NAME;
-
-    if (accessKeyId && secretAccessKey && accountId && bucketName) {
-      this.bucketName = bucketName;
-      this.accountId = accountId;
-      this.r2Client = new S3Client({
-        region: 'auto',
-        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      });
-      console.log(`[Storage] Cloudflare R2 initialized with bucket "${bucketName}".`);
-    } else {
-      console.log(
-        '[Storage] Cloudflare R2 credentials not fully set in environment. Falling back to local filesystem storage.'
-      );
+  const r2Opts = {};
+  if (options.range) {
+    const match = /bytes=(\d+)-(\d+)?/.exec(options.range);
+    if (match) {
+      const offset = parseInt(match[1], 10);
+      const end = match[2] ? parseInt(match[2], 10) : undefined;
+      r2Opts.range = { offset, length: end !== undefined ? end - offset + 1 : undefined };
     }
   }
 
-  isR2Active() {
-    return Boolean(this.workersBucket || this.r2Client);
+  const object = await bucket.get(cleanKey, r2Opts);
+  if (!object) return null;
+
+  const contentType = object.httpMetadata?.contentType || 'application/pdf';
+  const contentLength = object.size;
+  const result = {
+    stream: object.body,
+    contentType,
+    contentLength,
+    lastModified: object.uploaded,
+  };
+
+  // Attach Content-Range when a range was requested
+  if (options.range && r2Opts.range) {
+    const { offset, length } = r2Opts.range;
+    const end = length !== undefined ? offset + length - 1 : contentLength - 1;
+    result.contentRange = `bytes ${offset}-${end}/${object.size}`;
+    result.status = 206;
   }
 
-  /**
-   * Uploads a file buffer to storage.
-   * @param {Object} params
-   * @param {string} params.key - Key e.g. "papers/<uuid>.pdf", "answers/<uuid>.pdf", "drafts/<id>.json"
-   * @param {Buffer|Uint8Array} params.buffer - File data
-   * @param {string} [params.contentType='application/pdf']
-   * @param {Object} [params.metadata={}]
-   * @returns {Promise<{ key: string, size: number, contentType: string }>}
-   */
-  async uploadFile({ key, buffer, contentType = 'application/pdf', metadata = {} }) {
-    const cleanKey = normalizeStorageKey(key);
-    if (!cleanKey) throw new Error('Storage key is required');
-    if (!buffer) throw new Error('File buffer is required');
+  return result;
+}
 
-    // 1. Cloudflare Workers native R2 binding
-    if (this.workersBucket) {
-      await this.workersBucket.put(cleanKey, buffer, {
-        httpMetadata: { contentType },
-        customMetadata: metadata,
-      });
-      return { key: cleanKey, size: buffer.length, contentType };
-    }
+/**
+ * Returns true if the key exists in R2.
+ *
+ * @param {R2Bucket} bucket
+ * @param {string}   key
+ * @returns {Promise<boolean>}
+ */
+export async function fileExists(bucket, key) {
+  const cleanKey = normalizeStorageKey(key);
+  if (!cleanKey || !bucket) return false;
+  const head = await bucket.head(cleanKey);
+  return head !== null;
+}
 
-    // 2. Node.js S3-compatible R2 Client
-    if (this.r2Client) {
-      const command = new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: cleanKey,
-        Body: buffer,
-        ContentType: contentType,
-        Metadata: metadata,
-      });
-      await this.r2Client.send(command);
-      return { key: cleanKey, size: buffer.length, contentType };
-    }
-
-    // 3. Local filesystem fallback
-    const localPath = path.join(LOCAL_UPLOADS_DIR, cleanKey);
-    fs.mkdirSync(path.dirname(localPath), { recursive: true });
-    fs.writeFileSync(localPath, buffer);
-    return { key: cleanKey, size: buffer.length, contentType };
-  }
-
-  /**
-   * Retrieves a file from storage.
-   * @param {string} key
-   * @param {Object} [options]
-   * @param {string} [options.range] - HTTP Range header e.g. "bytes=0-1023"
-   * @returns {Promise<{ stream?: any, buffer?: Buffer, contentType: string, contentLength: number, contentRange?: string, lastModified?: Date }>}
-   */
-  async getFile(key, options = {}) {
-    const cleanKey = normalizeStorageKey(key);
-    if (!cleanKey) throw new Error('Storage key is required');
-
-    // 1. Cloudflare Workers native R2 binding
-    if (this.workersBucket) {
-      const r2Options = {};
-      if (options.range) {
-        // Parse "bytes=start-end"
-        const match = /bytes=(\d+)-(\d+)?/.exec(options.range);
-        if (match) {
-          const offset = parseInt(match[1], 10);
-          const end = match[2] ? parseInt(match[2], 10) : undefined;
-          r2Options.range = { offset, length: end !== undefined ? end - offset + 1 : undefined };
-        }
-      }
-      const object = await this.workersBucket.get(cleanKey, r2Options);
-      if (!object) return null;
-
-      const contentType = object.httpMetadata?.contentType || 'application/pdf';
-      return {
-        stream: object.body,
-        contentType,
-        contentLength: object.size,
-        lastModified: object.uploaded,
-      };
-    }
-
-    // 2. Node.js S3-compatible R2 Client
-    if (this.r2Client) {
-      try {
-        const command = new GetObjectCommand({
-          Bucket: this.bucketName,
-          Key: cleanKey,
-          Range: options.range,
-        });
-        const res = await this.r2Client.send(command);
-        return {
-          stream: res.Body,
-          contentType: res.ContentType || 'application/pdf',
-          contentLength: res.ContentLength,
-          contentRange: res.ContentRange,
-          lastModified: res.LastModified,
-        };
-      } catch (err) {
-        if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
-          // If not in R2, check local disk before giving up (e.g. during migration)
-          const fallback = this._getLocalFile(cleanKey, options);
-          if (fallback) return fallback;
-          return null;
-        }
-        throw err;
-      }
-    }
-
-    // 3. Local filesystem fallback
-    return this._getLocalFile(cleanKey, options);
-  }
-
-  _getLocalFile(cleanKey, options = {}) {
-    const localPath = path.join(LOCAL_UPLOADS_DIR, cleanKey);
-    if (!fs.existsSync(localPath)) return null;
-
-    const stats = fs.statSync(localPath);
-    let start = 0;
-    let end = stats.size - 1;
-    let contentRange;
-    let contentLength = stats.size;
-    let isRange = false;
-
-    if (options.range) {
-      const match = /bytes=(\d+)-(\d+)?/.exec(options.range);
-      if (match) {
-        isRange = true;
-        start = parseInt(match[1], 10);
-        if (match[2]) {
-          end = parseInt(match[2], 10);
-        }
-        contentLength = end - start + 1;
-        contentRange = `bytes ${start}-${end}/${stats.size}`;
-      }
-    }
-
-    const stream = fs.createReadStream(localPath, isRange ? { start, end } : undefined);
-    const ext = path.extname(cleanKey).toLowerCase();
-    const contentType = ext === '.pdf' ? 'application/pdf' : ext === '.json' ? 'application/json' : 'application/octet-stream';
-
-    return {
-      stream,
-      contentType,
-      contentLength,
-      contentRange,
-      lastModified: stats.mtime,
-    };
-  }
-
-  /**
-   * Checks whether a file exists in storage.
-   * @param {string} key
-   * @returns {Promise<boolean>}
-   */
-  async fileExists(key) {
-    const cleanKey = normalizeStorageKey(key);
-    if (!cleanKey) return false;
-
-    if (this.workersBucket) {
-      const head = await this.workersBucket.head(cleanKey);
-      return Boolean(head);
-    }
-
-    if (this.r2Client) {
-      try {
-        await this.r2Client.send(
-          new HeadObjectCommand({
-            Bucket: this.bucketName,
-            Key: cleanKey,
-          })
-        );
-        return true;
-      } catch (err) {
-        if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
-          // Check local disk fallback
-          const localPath = path.join(LOCAL_UPLOADS_DIR, cleanKey);
-          return fs.existsSync(localPath);
-        }
-        throw err;
-      }
-    }
-
-    const localPath = path.join(LOCAL_UPLOADS_DIR, cleanKey);
-    return fs.existsSync(localPath);
-  }
-
-  /**
-   * Deletes a file from storage.
-   * @param {string} key
-   * @returns {Promise<boolean>}
-   */
-  async deleteFile(key) {
-    const cleanKey = normalizeStorageKey(key);
-    if (!cleanKey) return false;
-
-    if (this.workersBucket) {
-      await this.workersBucket.delete(cleanKey);
-      return true;
-    }
-
-    if (this.r2Client) {
-      try {
-        await this.r2Client.send(
-          new DeleteObjectCommand({
-            Bucket: this.bucketName,
-            Key: cleanKey,
-          })
-        );
-      } catch (err) {
-        console.warn(`[Storage] Failed to delete R2 key "${cleanKey}":`, err.message);
-      }
-    }
-
-    // Also check and clean up local file if it exists
-    const localPath = path.join(LOCAL_UPLOADS_DIR, cleanKey);
-    if (fs.existsSync(localPath)) {
-      try {
-        fs.unlinkSync(localPath);
-      } catch {
-        /* ignore */
-      }
-    }
-
-    return true;
-  }
-
-  /**
-   * Replaces an existing file safely:
-   * 1. Uploads new file first.
-   * 2. Returns the new key.
-   * 3. Deletes old file only when deleteOld() is called (after database commits).
-   */
-  async replaceFile({ oldKey, newKey, buffer, contentType = 'application/pdf', metadata = {} }) {
-    // 1. Upload new file first
-    const uploaded = await this.uploadFile({ key: newKey, buffer, contentType, metadata });
-
-    // 2. Provide a callback to delete the old file once DB transaction/update is confirmed
-    const cleanupOld = async () => {
-      if (oldKey && oldKey !== newKey) {
-        try {
-          await this.deleteFile(oldKey);
-        } catch (err) {
-          console.warn(`[Storage] Non-fatal error cleaning up replaced file "${oldKey}":`, err.message);
-        }
-      }
-    };
-
-    // 3. Provide a rollback function if DB update fails
-    const rollback = async () => {
-      try {
-        await this.deleteFile(newKey);
-      } catch (err) {
-        console.warn(`[Storage] Failed to rollback newly uploaded file "${newKey}":`, err.message);
-      }
-    };
-
-    return {
-      key: uploaded.key,
-      cleanupOld,
-      rollback,
-    };
+/**
+ * Delete a file from R2 (non-fatal: logs a warning on error).
+ *
+ * @param {R2Bucket} bucket
+ * @param {string}   key
+ */
+export async function deleteFile(bucket, key) {
+  const cleanKey = normalizeStorageKey(key);
+  if (!cleanKey || !bucket) return;
+  try {
+    await bucket.delete(cleanKey);
+  } catch (err) {
+    console.warn(`[Storage] Failed to delete R2 key "${cleanKey}":`, err.message);
   }
 }
 
-export const storageService = new StorageService();
+/**
+ * Atomically replace a file in R2:
+ *   1. Upload the new file.
+ *   2. Return { key, cleanupOld, rollback } to the caller.
+ *   3. Caller calls cleanupOld() after the DB write succeeds,
+ *      or rollback() if the DB write fails.
+ *
+ * @param {R2Bucket} bucket
+ * @param {{ oldKey?: string, newKey: string, body: Uint8Array|ArrayBuffer|ReadableStream, contentType?: string, metadata?: object }} opts
+ */
+export async function replaceFile(bucket, { oldKey, newKey, body, contentType = 'application/pdf', metadata = {} }) {
+  const uploaded = await uploadFile(bucket, newKey, body, contentType, metadata);
+
+  const cleanupOld = async () => {
+    if (oldKey && oldKey !== newKey) {
+      await deleteFile(bucket, oldKey);
+    }
+  };
+
+  const rollback = async () => {
+    await deleteFile(bucket, newKey);
+  };
+
+  return { key: uploaded.key, cleanupOld, rollback };
+}

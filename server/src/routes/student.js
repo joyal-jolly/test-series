@@ -5,7 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
 import { supabase } from '../supabase.js';
-import { storageService, isValidPdf } from '../storage.js';
+import { uploadFile, deleteFile, isValidPdf } from '../storage.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -453,15 +453,10 @@ router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next)
       }
 
       fileKey = `answers/${uuid()}.pdf`;
-      await storageService.uploadFile({
-        key: fileKey,
-        buffer: req.file.buffer,
-        contentType: 'application/pdf',
-        metadata: {
-          originalName: req.file.originalname,
-          studentId: req.user.id,
-          attemptId: attempt.id,
-        },
+      await uploadFile(req.app.get('r2'), fileKey, req.file.buffer, 'application/pdf', {
+        originalName: req.file.originalname,
+        studentId: req.user.id,
+        attemptId: attempt.id,
       });
 
       const now = new Date().toISOString();
@@ -484,7 +479,7 @@ router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next)
         await dbService.createSubmission(submission, attempt.id);
       } catch (insertErr) {
         if (fileKey) {
-          await storageService.deleteFile(fileKey).catch(() => {});
+          await deleteFile(req.app.get('r2'), fileKey).catch(() => {});
         }
         throw insertErr;
       }
@@ -502,7 +497,7 @@ router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next)
       });
     } catch (dbErr) {
       if (fileKey) {
-        await storageService.deleteFile(fileKey).catch(() => {});
+        await deleteFile(req.app.get('r2'), fileKey).catch(() => {});
       }
       next(dbErr);
     }

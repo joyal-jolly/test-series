@@ -4,7 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
-import { storageService, isValidPdf, normalizeStorageKey } from '../storage.js';
+import { uploadFile, deleteFile, getFile, isValidPdf, normalizeStorageKey } from '../storage.js';
 
 // Memory storage for annotated PDF uploads (up to 50MB)
 const uploadAnnotated = multer({
@@ -125,21 +125,15 @@ router.get('/assignments/:id', async (req, res, next) => {
     // If draftAnnotations is not present on the submission record, load from storage if available
     if (assignment.draftAnnotations === undefined || assignment.draftAnnotations === null) {
       try {
-        const draftFile = await storageService.getFile(`drafts/${submission.id}.json`);
+        const bucket = req.app.get('r2');
+        const draftFile = await getFile(bucket, `drafts/${submission.id}.json`);
         if (draftFile) {
-          let raw = '';
-          if (draftFile.buffer) {
-            raw = draftFile.buffer.toString('utf8');
-          } else if (draftFile.stream) {
-            const chunks = [];
-            for await (const chunk of draftFile.stream) {
-              chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-            }
-            raw = Buffer.concat(chunks).toString('utf8');
+          const chunks = [];
+          for await (const chunk of draftFile.stream) {
+            chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
           }
-          if (raw) {
-            assignment.draftAnnotations = JSON.parse(raw);
-          }
+          const raw = Buffer.concat(chunks).toString('utf8');
+          if (raw) assignment.draftAnnotations = JSON.parse(raw);
         }
       } catch {
         /* ignore draft parse errors */
@@ -188,11 +182,12 @@ router.patch('/assignments/:id/draft', async (req, res, next) => {
         // Save feedback + draftSavedAt to Supabase without the missing column
         await dbService.updateSubmission(submission.id, update);
         // Persist draft annotations to storage
-        await storageService.uploadFile({
-          key: `drafts/${submission.id}.json`,
-          buffer: Buffer.from(JSON.stringify(draftAnnotations || null)),
-          contentType: 'application/json',
-        });
+        await uploadFile(
+          req.app.get('r2'),
+          `drafts/${submission.id}.json`,
+          Buffer.from(JSON.stringify(draftAnnotations || null)),
+          'application/json',
+        );
       } else {
         throw dbErr;
       }
@@ -222,16 +217,17 @@ router.post('/assignments/:id/upload-annotated', (req, res, next) => {
       }
 
       annotatedKey = `answers/${submission.id}-annotated.pdf`;
-      await storageService.uploadFile({
-        key: annotatedKey,
-        buffer: req.file.buffer,
-        contentType: 'application/pdf',
-        metadata: {
+      await uploadFile(
+        req.app.get('r2'),
+        annotatedKey,
+        req.file.buffer,
+        'application/pdf',
+        {
           submissionId: submission.id,
           reviewerId: req.user.id,
           annotatedAt: new Date().toISOString(),
         },
-      });
+      );
 
       const newUrl = `/api/files/${annotatedKey}`;
       await dbService.updateSubmission(submission.id, {
@@ -241,7 +237,7 @@ router.post('/assignments/:id/upload-annotated', (req, res, next) => {
       res.json({ url: newUrl });
     } catch (uploadErr) {
       if (annotatedKey) {
-        await storageService.deleteFile(annotatedKey).catch(() => {});
+        await deleteFile(req.app.get('r2'), annotatedKey).catch(() => {});
       }
       next(uploadErr);
     }

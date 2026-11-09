@@ -2,14 +2,15 @@ import { Router } from 'express';
 import path from 'path';
 import { dbService } from '../db.js';
 import { optionalAuth } from '../middleware.js';
-import { storageService, normalizeStorageKey } from '../storage.js';
+import { getFile, normalizeStorageKey } from '../storage.js';
 
 const router = Router();
 
 // Handle Range / Streaming responses from storage
 async function streamFileToResponse(req, res, fileKey, fallbackFilename = 'document.pdf') {
+  const bucket = req.app.get('r2');
   const range = req.headers.range;
-  const file = await storageService.getFile(fileKey, { range });
+  const file = await getFile(bucket, fileKey, { range });
 
   if (!file) {
     return res.status(404).json({ error: 'File not found' });

@@ -9,7 +9,7 @@
   "r2_buckets": [
     {
       "binding": "R2_BUCKET",
-      "bucket_name": "ca-test-series-pdf-storage",
+      "bucket_name": "test-series-files",
       "preview_bucket_name": "ca-test-series-pdf-storage-dev"
     }
   ],
