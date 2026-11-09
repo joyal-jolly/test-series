@@ -12,3 +12,4 @@
   ],
   "vars": { "NODE_ENV": "production" }
 }
+   "vars": { "NODE_ENV": "production", "SUPABASE_URL": "https://tdtppuqpoivkztrlqmny.supabase.co" }
