@@ -1,8 +1,16 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ca-academy-dev-secret-change-me';
 const TOKEN_DAYS = 7;
+
+function getSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (secret) return secret;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  return 'ca-academy-dev-secret-change-me'; // local dev only
+}
 
 export function hashPassword(password) {
   return bcrypt.hashSync(password, 10);
@@ -15,11 +23,11 @@ export function verifyPassword(password, hash) {
 export function signToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role, name: user.name },
-    JWT_SECRET,
+    getSecret(),
     { expiresIn: `${TOKEN_DAYS}d` }
   );
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, JWT_SECRET);
+  return jwt.verify(token, getSecret());
 }

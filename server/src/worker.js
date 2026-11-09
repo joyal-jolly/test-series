@@ -1,51 +1,24 @@
 /**
  * Cloudflare Workers entry point.
  *
- * The R2 bucket binding (env.R2_BUCKET) is stored on the Express app instance
- * so every route handler can retrieve it with `req.app.get('r2')`.
+ * Runs the shared Express app (app.js) using Cloudflare's Node HTTP server
+ * support. The R2 bucket binding is stored on the app so route handlers can
+ * use `req.app.get('r2')`.
+ *
+ * Secrets (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, JWT_SECRET, ...) are
+ * available on process.env thanks to the `nodejs_compat_populate_process_env`
+ * compatibility flag in wrangler.jsonc.
  */
 
-import app from './app.js';          // shared Express app (see index.js / app.js split)
-import { getFile, normalizeStorageKey } from './storage.js';
+import { httpServerHandler } from 'cloudflare:node';
+import { env } from 'cloudflare:workers';
+import app from './app.js';
 
-export default {
-  async fetch(request, env, _ctx) {
-    // ── Inject R2 bucket binding into the Express app ──────────────────────
-    if (env.R2_BUCKET) {
-      app.set('r2', env.R2_BUCKET);
-    }
+// Make the R2 bucket available to every route: req.app.get('r2')
+app.set('r2', env.R2_BUCKET);
 
-    // ── Inject Supabase / JWT secrets from Worker env ───────────────────────
-    if (typeof process !== 'undefined' && process.env) {
-      if (env.SUPABASE_URL)              process.env.SUPABASE_URL = env.SUPABASE_URL;
-      if (env.SUPABASE_SERVICE_ROLE_KEY) process.env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
-      if (env.JWT_SECRET)                process.env.JWT_SECRET = env.JWT_SECRET;
-    }
+// Start the Express app on a virtual port inside the Worker.
+// (Health check is already handled by /api/health in app.js.)
+app.listen(8787);
 
-    const url = new URL(request.url);
-
-    // ── Health check ────────────────────────────────────────────────────────
-    if (url.pathname === '/api/health') {
-      return new Response(
-        JSON.stringify({ ok: true, runtime: 'Cloudflare Workers', r2Bound: Boolean(env.R2_BUCKET) }),
-        { headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // ── Delegate to Express ─────────────────────────────────────────────────
-    return new Promise((resolve) => {
-      const req = new Request(request.url, {
-        method: request.method,
-        headers: request.headers,
-        body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
-      });
-
-      // Minimal Node-compatible shim – Workers adapter handles the bridge
-      app.handle(req, {
-        end: (body) => resolve(new Response(body)),
-        setHeader: () => {},
-        getHeader: () => null,
-      });
-    });
-  },
-};
+export default httpServerHandler({ port: 8787 });
