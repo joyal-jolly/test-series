@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PortalLayout } from '../components/Layouts';
-import { api } from '../lib/api';
+import { api, getAuthFileUrl } from '../lib/api';
 
 // ─── Leave Exam Confirmation Modal ────────────────────────────────────────────
 function LeaveExamModal({ onConfirm, onCancel, busy }) {
@@ -394,7 +394,7 @@ export function AttemptPage() {
           <div className="success-box">
             <p>Your answer has been submitted. An admin will assign a reviewer shortly.</p>
             {attempt?.submission?.answerFileUrl && (
-              <a href={attempt.submission.answerFileUrl} target="_blank" rel="noreferrer">
+              <a href={getAuthFileUrl(attempt.submission.answerFileUrl)} target="_blank" rel="noreferrer">
                 View uploaded file
               </a>
             )}
@@ -547,7 +547,7 @@ export function AttemptPage() {
               key={paper.pdfUrl}
               className="exam-pdf-frame"
               title="Question paper"
-              src={`${paper.pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
+              src={`${getAuthFileUrl(paper.pdfUrl)}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
             />
           ) : (
             <div className="exam-no-pdf">
@@ -704,7 +704,7 @@ export function ResultPage() {
                 Click below to view result
               </p>
               <a
-                href={`${submission.answerFileUrl}?v=${encodeURIComponent(evaluation.evaluatedAt || '')}`}
+                href={getAuthFileUrl(`${submission.answerFileUrl}?v=${encodeURIComponent(evaluation.evaluatedAt || '')}`)}
                 target="_blank"
                 rel="noreferrer"
                 className="btn primary annotated-pdf-btn"

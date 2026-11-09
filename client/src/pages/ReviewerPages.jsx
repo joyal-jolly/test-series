@@ -332,11 +332,15 @@ export function ReviewSubmissionPage() {
   const { assignment } = data;
   const completed = assignment.status === 'evaluated';
 
-  // Build absolute URLs (needed for PDF.js cross-origin loading)
+  // Build absolute URLs (needed for PDF.js loading)
   function buildUrl(path) {
     if (!path) return null;
     const { protocol, hostname, port } = window.location;
-    return `${protocol}//${hostname}${port ? ':' + port : ''}${path}`;
+    const base = `${protocol}//${hostname}${port ? ':' + port : ''}${path}`;
+    const token = localStorage.getItem('ca_token');
+    if (!token || base.includes('token=')) return base;
+    const separator = base.includes('?') ? '&' : '?';
+    return `${base}${separator}token=${encodeURIComponent(token)}`;
   }
 
   const answerUrl = buildUrl(assignment.answerFileUrl);

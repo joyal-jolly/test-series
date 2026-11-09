@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PortalLayout } from '../components/Layouts';
-import { api } from '../lib/api';
+import { api, getAuthFileUrl } from '../lib/api';
 
 export function AdminPortalLayout({ children, unassignedCount }) {
   const [pendingCount, setPendingCount] = useState(
@@ -189,7 +189,7 @@ export function AdminPapers() {
 
   function reload() {
     setLoading(true);
-    api('/api/admin/groups')
+    api('/api/admin/groups', { cache: false })
       .then((gd) => {
         setGroups(gd.groups || []);
         setLoading(false);
@@ -711,7 +711,7 @@ export function AdminPapers() {
                                         Edit
                                       </button>
                                       {p.pdfUrl && (
-                                        <a href={p.pdfUrl} target="_blank" rel="noreferrer" className="btn subtle">
+                                        <a href={getAuthFileUrl(p.pdfUrl)} target="_blank" rel="noreferrer" className="btn subtle">
                                           PDF
                                         </a>
                                       )}
@@ -985,7 +985,7 @@ export function AdminPapers() {
                 <label>
                   Current PDF
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem' }}>
-                    <a href={paperModal.existingPaper.pdfUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
+                    <a href={getAuthFileUrl(paperModal.existingPaper.pdfUrl)} target="_blank" rel="noreferrer" style={{ textDecoration: 'underline' }}>
                       View current uploaded file
                     </a>
                   </div>
@@ -1190,7 +1190,7 @@ export function AdminUsers() {
 
   function reload() {
     setLoading(true);
-    api('/api/admin/users')
+    api('/api/admin/users', { cache: false })
       .then((d) => { setUsers(d.users || []); setLoading(false); })
       .catch(() => setLoading(false));
   }
@@ -1576,7 +1576,7 @@ export function AdminInsights() {
             ← Back to {selectedGroup?.name}
           </button>
           {selectedPaper.pdfUrl && (
-            <a href={selectedPaper.pdfUrl} target="_blank" rel="noreferrer" className="btn ghost">
+            <a href={getAuthFileUrl(selectedPaper.pdfUrl)} target="_blank" rel="noreferrer" className="btn ghost">
               View Question Paper PDF ↗
             </a>
           )}
@@ -1678,7 +1678,7 @@ export function AdminInsights() {
                           <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end', alignItems: 'center' }}>
                             {r.answerFileUrl && (
                               <a
-                                href={r.answerFileUrl}
+                                href={getAuthFileUrl(r.answerFileUrl)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="btn ghost"
@@ -1999,7 +1999,7 @@ function InsightGroupDetail({ group, onBack, onSelectPaper, onSelectStudent }) {
                           {s.evaluated > 0 ? (
                             <span style={{
                               fontWeight: 700,
-                              color: pct >= 60 ? 'var(--ok)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)',
+                              color: 'var(--ink)',
                             }}>
                               {s.totalMarksAwarded} / {s.totalMaxMarks}
                               <span className="muted" style={{ fontWeight: 400, fontSize: '0.78rem', marginLeft: '0.3rem' }}>
@@ -2269,7 +2269,7 @@ function InsightStudentScorecard({ group, student, onBack }) {
                             <span style={{
                               fontWeight: 700,
                               fontSize: '1rem',
-                              color: pct >= 60 ? 'var(--ok)' : pct >= 40 ? 'var(--warn)' : 'var(--danger)',
+                              color: 'var(--ink)',
                             }}>
                               {paper.marksAwarded}
                               <span className="muted" style={{ fontWeight: 400, fontSize: '0.8rem' }}> / {paper.totalMarks}</span>
@@ -2287,7 +2287,7 @@ function InsightStudentScorecard({ group, student, onBack }) {
                         <td style={{ textAlign: 'right' }}>
                           {paper.answerFileUrl ? (
                             <a
-                              href={paper.answerFileUrl}
+                              href={getAuthFileUrl(paper.answerFileUrl)}
                               target="_blank"
                               rel="noreferrer"
                               className="btn ghost"

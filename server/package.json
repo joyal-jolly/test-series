@@ -8,6 +8,7 @@
     "start": "node src/index.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1164.0",
     "@supabase/supabase-js": "^2.117.3",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

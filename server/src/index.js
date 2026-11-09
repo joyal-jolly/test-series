@@ -16,6 +16,7 @@ import studentRoutes from './routes/student.js';
 import adminRoutes from './routes/admin.js';
 import reviewerRoutes from './routes/reviewer.js';
 import contactRoutes from './routes/contact.js';
+import filesRoutes from './routes/files.js';
 
 const PORT = process.env.PORT || 4000;
 const UPLOADS = path.join(__dirname, '..', 'uploads');
@@ -37,6 +38,9 @@ await initializeDatabase();
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '2mb' }));
+app.use('/api/files', filesRoutes);
+// Backward compatibility for existing file references (/uploads/papers/*, /uploads/answers/*)
+app.use('/uploads', filesRoutes);
 app.use('/uploads', express.static(UPLOADS));
 
 app.get('/api/health', (_req, res) => {

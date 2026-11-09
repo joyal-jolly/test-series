@@ -1,27 +1,14 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { v4 as uuid } from 'uuid';
-import { fileURLToPath } from 'url';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
 import { supabase } from '../supabase.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const UPLOAD_DIR = path.join(__dirname, '..', '..', 'uploads', 'answers');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
-    cb(null, `${uuid()}${ext}`);
-  },
-});
+import { storageService, isValidPdf } from '../storage.js';
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -451,6 +438,7 @@ router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next)
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'Answer PDF is required' });
 
+    let fileKey = null;
     try {
       const attempt = await dbService.getAttemptById(req.params.id);
       if (!attempt || attempt.studentId !== req.user.id) {
@@ -460,13 +448,29 @@ router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next)
         return res.status(400).json({ error: 'This attempt can no longer be submitted' });
       }
 
+      if (!isValidPdf(req.file.buffer)) {
+        return res.status(400).json({ error: 'Uploaded file is not a valid PDF document' });
+      }
+
+      fileKey = `answers/${uuid()}.pdf`;
+      await storageService.uploadFile({
+        key: fileKey,
+        buffer: req.file.buffer,
+        contentType: 'application/pdf',
+        metadata: {
+          originalName: req.file.originalname,
+          studentId: req.user.id,
+          attemptId: attempt.id,
+        },
+      });
+
       const now = new Date().toISOString();
       const submission = {
         id: uuid(),
         attemptId: attempt.id,
         studentId: req.user.id,
         questionPaperId: attempt.questionPaperId,
-        answerFileUrl: `/uploads/answers/${req.file.filename}`,
+        answerFileUrl: `/api/files/${fileKey}`,
         originalName: req.file.originalname,
         submittedAt: now,
         status: 'submitted',
@@ -476,7 +480,14 @@ router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next)
         draftSavedAt: null,
       };
 
-      await dbService.createSubmission(submission, attempt.id);
+      try {
+        await dbService.createSubmission(submission, attempt.id);
+      } catch (insertErr) {
+        if (fileKey) {
+          await storageService.deleteFile(fileKey).catch(() => {});
+        }
+        throw insertErr;
+      }
 
       const [updatedAttempt, papers, submissions, evaluations] = await Promise.all([
         dbService.getAttemptById(attempt.id),
@@ -490,6 +501,9 @@ router.post('/:id/submit', requireAuth, requireRole('student'), (req, res, next)
         attempt: enrichAttempt(updatedAttempt, papers, submissions, evaluations),
       });
     } catch (dbErr) {
+      if (fileKey) {
+        await storageService.deleteFile(fileKey).catch(() => {});
+      }
       next(dbErr);
     }
   });

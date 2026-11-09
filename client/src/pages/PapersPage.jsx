@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PublicLayout } from '../components/Layouts';
 import { useAuth } from '../context/AuthContext';
-import { api } from '../lib/api';
+import { api, getCachedData } from '../lib/api';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 const LS_KEY = 'mentaura_enrolled_groups';
@@ -77,10 +77,14 @@ export default function PapersPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [groups, setGroups] = useState([]);
-  const [subjects, setSubjects] = useState([]);
+  const cachedGroups = getCachedData('/api/papers/groups');
+  const cachedSubjects = getCachedData('/api/papers/subjects');
+
+  // Instant on cache hit, spinner on miss
+  const [groups, setGroups] = useState(() => cachedGroups?.groups || cachedGroups || []);
+  const [subjects, setSubjects] = useState(() => cachedSubjects?.subjects || cachedSubjects || []);
   const [filters, setFilters] = useState({ q: '', caLevel: '', subjectId: '' });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!groups || groups.length === 0);
   const [fetchError, setFetchError] = useState('');
 
   // Set of enrolled group IDs for this student
@@ -90,21 +94,26 @@ export default function PapersPage() {
   const [purchaseTarget, setPurchaseTarget] = useState(null); // { id, name }
   const [enrollBusy, setEnrollBusy] = useState(false);
 
-  // ── Load groups ──────────────────────────────────────────────────────────────
-  function loadGroups() {
-    setLoading(true);
+  const loadGroups = () => {
+    if (!groups.length) setLoading(true);
     setFetchError('');
     api('/api/papers/groups')
-      .then((d) => setGroups(d.groups || []))
-      .catch((err) => setFetchError(err.message || 'Failed to load groups'))
+      .then((d) => setGroups(d?.groups || d || []))
+      .catch((err) => {
+        if (!groups.length) setFetchError(err.message || 'Failed to load groups');
+      })
       .finally(() => setLoading(false));
-  }
+  };
 
   useEffect(() => {
-    api('/api/papers/subjects').then((d) => setSubjects(d.subjects || [])).catch(() => {});
+    api('/api/papers/subjects')
+      .then((d) => setSubjects(d?.subjects || d || []))
+      .catch(() => {});
   }, []);
 
-  useEffect(() => { loadGroups(); }, []);
+  useEffect(() => {
+    loadGroups();
+  }, []);
 
   // ── Sync enrollments ─────────────────────────────────────────────────────────
   useEffect(() => {

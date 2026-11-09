@@ -1,28 +1,15 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 import { v4 as uuid } from 'uuid';
-import { fileURLToPath } from 'url';
 import { hashPassword } from '../auth.js';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const QP_DIR = path.join(__dirname, '..', '..', 'uploads', 'papers');
-fs.mkdirSync(QP_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, QP_DIR),
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
-    cb(null, `${uuid()}${ext}`);
-  },
-});
+import { storageService, isValidPdf, normalizeStorageKey } from '../storage.js';
 
 const upload = multer({
-  storage,
-  limits: { fileSize: 20 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB limit
   fileFilter: (_req, file, cb) => {
     if (path.extname(file.originalname).toLowerCase() !== '.pdf') {
       return cb(new Error('Only PDF files are allowed for question papers'));
@@ -528,6 +515,21 @@ router.post('/papers', (req, res, next) => {
         ];
       }
 
+      let uploadedKey = null;
+      if (req.file) {
+        if (!isValidPdf(req.file.buffer)) {
+          return res.status(400).json({ error: 'Uploaded file is not a valid PDF document' });
+        }
+        const fileKey = `papers/${uuid()}.pdf`;
+        await storageService.uploadFile({
+          key: fileKey,
+          buffer: req.file.buffer,
+          contentType: 'application/pdf',
+          metadata: { originalName: req.file.originalname, uploadedBy: req.user.id },
+        });
+        uploadedKey = fileKey;
+      }
+
       const now = new Date().toISOString();
       const paperStatus = status === 'published' ? 'published' : 'draft';
       const paper = {
@@ -540,7 +542,7 @@ router.post('/papers', (req, res, next) => {
         description: description || '',
         totalMarks: Number(totalMarks) || 100,
         durationMinutes: Number(durationMinutes) || 180,
-        pdfUrl: req.file ? `/uploads/papers/${req.file.filename}` : null,
+        pdfUrl: uploadedKey ? `/api/files/${uploadedKey}` : null,
         status: paperStatus,
         publishedAt: paperStatus === 'published' ? now : null,
         createdBy: req.user.id,
@@ -557,8 +559,15 @@ router.post('/papers', (req, res, next) => {
         })),
       };
 
-      await dbService.createQuestionPaper(paper);
-      res.status(201).json({ paper });
+      try {
+        await dbService.createQuestionPaper(paper);
+        res.status(201).json({ paper });
+      } catch (insertErr) {
+        if (uploadedKey) {
+          await storageService.deleteFile(uploadedKey).catch(() => {});
+        }
+        throw insertErr;
+      }
     } catch (dbErr) {
       next(dbErr);
     }
@@ -569,6 +578,7 @@ router.patch('/papers/:id', (req, res, next) => {
   upload.single('pdf')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
 
+    let replaceResult = null;
     try {
       const existing = await dbService.getQuestionPaperById(req.params.id);
       if (!existing) return res.status(404).json({ error: 'Paper not found' });
@@ -606,15 +616,19 @@ router.patch('/papers/:id', (req, res, next) => {
       }
 
       if (req.file) {
-        if (existing.pdfUrl) {
-          const oldFile = path.join(QP_DIR, path.basename(existing.pdfUrl));
-          if (fs.existsSync(oldFile)) {
-            try {
-              fs.unlinkSync(oldFile);
-            } catch { }
-          }
+        if (!isValidPdf(req.file.buffer)) {
+          return res.status(400).json({ error: 'Uploaded file is not a valid PDF document' });
         }
-        updates.pdfUrl = `/uploads/papers/${req.file.filename}`;
+        const newKey = `papers/${uuid()}.pdf`;
+        const oldKey = existing.pdfUrl ? normalizeStorageKey(existing.pdfUrl) : null;
+        replaceResult = await storageService.replaceFile({
+          oldKey,
+          newKey,
+          buffer: req.file.buffer,
+          contentType: 'application/pdf',
+          metadata: { originalName: req.file.originalname, uploadedBy: req.user.id },
+        });
+        updates.pdfUrl = `/api/files/${newKey}`;
       }
 
       if (req.body.status) {
@@ -636,8 +650,18 @@ router.patch('/papers/:id', (req, res, next) => {
       }
 
       const updated = await dbService.updateQuestionPaper(req.params.id, updates);
+
+      // Clean up old file only after DB update succeeds
+      if (replaceResult) {
+        await replaceResult.cleanupOld();
+      }
+
       res.json({ paper: updated });
     } catch (dbErr) {
+      // Rollback newly uploaded file if DB update failed
+      if (replaceResult) {
+        await replaceResult.rollback();
+      }
       next(dbErr);
     }
   });
@@ -648,16 +672,14 @@ router.delete('/papers/:id', async (req, res, next) => {
     const paper = await dbService.getQuestionPaperById(req.params.id);
     if (!paper) return res.status(404).json({ error: 'Paper not found' });
 
+    await dbService.deleteQuestionPaper(req.params.id);
+
     if (paper.pdfUrl) {
-      const filePath = path.join(QP_DIR, path.basename(paper.pdfUrl));
-      if (fs.existsSync(filePath)) {
-        try {
-          fs.unlinkSync(filePath);
-        } catch { }
-      }
+      await storageService.deleteFile(paper.pdfUrl).catch((err) => {
+        console.warn(`[Storage] Failed to delete file for paper ${req.params.id}:`, err.message);
+      });
     }
 
-    await dbService.deleteQuestionPaper(req.params.id);
     res.json({ ok: true, message: 'Question paper deleted successfully' });
   } catch (err) {
     next(err);

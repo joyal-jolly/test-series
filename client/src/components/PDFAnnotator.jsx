@@ -271,7 +271,9 @@ const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
     annotCanvasRefs.current = {};
 
     let isCancelled = false;
-    const task = pdfjsLib.getDocument({ url: pdfUrl });
+    const token = typeof window !== 'undefined' ? localStorage.getItem('ca_token') : null;
+    const httpHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+    const task = pdfjsLib.getDocument({ url: pdfUrl, httpHeaders });
     task.promise
       .then((doc) => {
         if (isCancelled) return;

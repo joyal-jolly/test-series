@@ -1,9 +1,15 @@
 import { verifyToken } from './auth.js';
 import { dbService } from './db.js';
 
-export async function requireAuth(req, res, next) {
+export function extractToken(req) {
   const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (header.startsWith('Bearer ')) return header.slice(7);
+  if (req.query && req.query.token) return String(req.query.token);
+  return null;
+}
+
+export async function requireAuth(req, res, next) {
+  const token = extractToken(req);
   if (!token) return res.status(401).json({ error: 'Authentication required' });
   try {
     const payload = verifyToken(token);
@@ -23,8 +29,7 @@ export async function requireAuth(req, res, next) {
 }
 
 export async function optionalAuth(req, _res, next) {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  const token = extractToken(req);
   if (!token) return next();
   try {
     const payload = verifyToken(token);

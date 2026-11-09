@@ -2,24 +2,22 @@ import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { dbService } from '../db.js';
 import { requireAuth, requireRole } from '../middleware.js';
+import { storageService, isValidPdf, normalizeStorageKey } from '../storage.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ANSWERS_DIR = path.join(__dirname, '..', '..', 'uploads', 'answers');
-const DRAFTS_DIR = path.join(__dirname, '..', '..', 'uploads', 'drafts');
-if (!fs.existsSync(DRAFTS_DIR)) {
-  try { fs.mkdirSync(DRAFTS_DIR, { recursive: true }); } catch { /* ignore */ }
-}
-
-// Temporary multer storage – we rename the file to overwrite the original answer
-const tmpStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, ANSWERS_DIR),
-  filename: (_req, _file, cb) => cb(null, `_tmp_${uuid()}.pdf`),
+// Memory storage for annotated PDF uploads (up to 50MB)
+const uploadAnnotated = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.pdf') {
+      return cb(new Error('Only PDF files are allowed'));
+    }
+    cb(null, true);
+  },
 });
-const uploadAnnotated = multer({ storage: tmpStorage, limits: { fileSize: 50 * 1024 * 1024 } });
 
 const router = Router();
 router.use(requireAuth, requireRole('reviewer'));
@@ -124,13 +122,27 @@ router.get('/assignments/:id', async (req, res, next) => {
 
     const assignment = enrichSubmission(submission, users, papers, evaluations);
 
-    // If draftAnnotations is not present on the submission record, load from local fallback if available
+    // If draftAnnotations is not present on the submission record, load from storage if available
     if (assignment.draftAnnotations === undefined || assignment.draftAnnotations === null) {
-      const draftPath = path.join(DRAFTS_DIR, `${submission.id}.json`);
-      if (fs.existsSync(draftPath)) {
-        try {
-          assignment.draftAnnotations = JSON.parse(fs.readFileSync(draftPath, 'utf8'));
-        } catch { /* ignore */ }
+      try {
+        const draftFile = await storageService.getFile(`drafts/${submission.id}.json`);
+        if (draftFile) {
+          let raw = '';
+          if (draftFile.buffer) {
+            raw = draftFile.buffer.toString('utf8');
+          } else if (draftFile.stream) {
+            const chunks = [];
+            for await (const chunk of draftFile.stream) {
+              chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+            }
+            raw = Buffer.concat(chunks).toString('utf8');
+          }
+          if (raw) {
+            assignment.draftAnnotations = JSON.parse(raw);
+          }
+        }
+      } catch {
+        /* ignore draft parse errors */
       }
     }
 
@@ -169,15 +181,18 @@ router.patch('/assignments/:id/draft', async (req, res, next) => {
     try {
       await dbService.updateSubmission(submission.id, update);
     } catch (dbErr) {
-      // If Supabase schema does not have draftAnnotations column yet, fallback to saving draft annotations on disk
+      // If Supabase schema does not have draftAnnotations column yet, fallback to saving draft annotations in storage
       if (dbErr.message && dbErr.message.includes('draftAnnotations')) {
-        console.warn(`[draft] Supabase submissions table missing draftAnnotations column. Saving annotations to local fallback.`);
+        console.warn(`[draft] Supabase submissions table missing draftAnnotations column. Saving annotations to storage fallback.`);
         delete update.draftAnnotations;
         // Save feedback + draftSavedAt to Supabase without the missing column
         await dbService.updateSubmission(submission.id, update);
-        // Persist draft annotations on local disk as fallback
-        const draftPath = path.join(DRAFTS_DIR, `${submission.id}.json`);
-        fs.writeFileSync(draftPath, JSON.stringify(draftAnnotations || null), 'utf8');
+        // Persist draft annotations to storage
+        await storageService.uploadFile({
+          key: `drafts/${submission.id}.json`,
+          buffer: Buffer.from(JSON.stringify(draftAnnotations || null)),
+          contentType: 'application/json',
+        });
       } else {
         throw dbErr;
       }
@@ -189,48 +204,46 @@ router.patch('/assignments/:id/draft', async (req, res, next) => {
   }
 });
 
-// Upload reviewed PDF – overwrites the original student answer file in-place
+// Upload reviewed PDF – uploads annotated PDF to R2 and updates submission record
 router.post('/assignments/:id/upload-annotated', (req, res, next) => {
   uploadAnnotated.single('annotatedPdf')(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    let annotatedKey = null;
     try {
       const submission = await dbService.getSubmissionById(req.params.id);
       if (!submission || submission.assignedReviewerId !== req.user.id) {
-        fs.unlink(req.file.path, () => {});
         return res.status(404).json({ error: 'Assignment not found' });
       }
 
-      // Derive the original answer file path from the stored URL
-      // answerFileUrl is like /uploads/answers/<filename>
-      const originalFilename = path.basename(submission.answerFileUrl || '');
-      if (!originalFilename) {
-        // No original file on record – just keep the uploaded file as-is
-        const url = `/uploads/answers/${req.file.filename}`;
-        return res.json({ url });
+      if (!isValidPdf(req.file.buffer)) {
+        return res.status(400).json({ error: 'Uploaded file is not a valid PDF document' });
       }
 
-      const originalPath = path.join(ANSWERS_DIR, originalFilename);
-
-      // Overwrite the original with the reviewed PDF
-      fs.rename(req.file.path, originalPath, (renameErr) => {
-        if (renameErr) {
-          // Fallback: copy then remove if cross-device rename fails
-          const rs = fs.createReadStream(req.file.path);
-          const ws = fs.createWriteStream(originalPath);
-          rs.pipe(ws);
-          ws.on('finish', () => {
-            fs.unlink(req.file.path, () => {});
-            res.json({ url: submission.answerFileUrl });
-          });
-          ws.on('error', (copyErr) => next(copyErr));
-        } else {
-          // Return the same original URL – the file has been overwritten
-          res.json({ url: submission.answerFileUrl });
-        }
+      annotatedKey = `answers/${submission.id}-annotated.pdf`;
+      await storageService.uploadFile({
+        key: annotatedKey,
+        buffer: req.file.buffer,
+        contentType: 'application/pdf',
+        metadata: {
+          submissionId: submission.id,
+          reviewerId: req.user.id,
+          annotatedAt: new Date().toISOString(),
+        },
       });
-    } catch (err2) {
-      next(err2);
+
+      const newUrl = `/api/files/${annotatedKey}`;
+      await dbService.updateSubmission(submission.id, {
+        answerFileUrl: newUrl,
+      });
+
+      res.json({ url: newUrl });
+    } catch (uploadErr) {
+      if (annotatedKey) {
+        await storageService.deleteFile(annotatedKey).catch(() => {});
+      }
+      next(uploadErr);
     }
   });
 });

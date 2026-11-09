@@ -30,6 +30,13 @@ import {
   ReviewSubmissionPage,
   ReviewErrorBoundary,
 } from './pages/ReviewerPages';
+import {
+  NotFoundPage,
+  ForbiddenPage,
+  ServerErrorPage,
+  BadGatewayPage,
+  ServiceUnavailablePage,
+} from './pages/ErrorPages';
 
 export default function App() {
   return (
@@ -163,7 +170,15 @@ export default function App() {
               }
             />
 
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* ── Dedicated Error Mini Pages ── */}
+            <Route path="/403" element={<ForbiddenPage />} />
+            <Route path="/404" element={<NotFoundPage />} />
+            <Route path="/500" element={<ServerErrorPage />} />
+            <Route path="/502" element={<BadGatewayPage />} />
+            <Route path="/503" element={<ServiceUnavailablePage />} />
+
+            {/* ── Catch-all 404 Route ── */}
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

@@ -1,8 +1,22 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { PublicLayout } from '../components/Layouts';
 import CampusBuildingGrid from '../components/CampusBuildingGrid';
+import { api } from '../lib/api';
 
 export default function HomePage() {
+  useEffect(() => {
+    const run = () => {
+      api('/api/papers/groups').catch(() => {});
+      api('/api/papers/subjects').catch(() => {});
+    };
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(run, { timeout: 2000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = setTimeout(run, 500);
+    return () => clearTimeout(t);
+  }, []);
   return (
     <PublicLayout>
       <div className="home-canvas">

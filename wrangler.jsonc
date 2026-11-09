@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ca-test-series-api",
+  "main": "server/src/worker.js",
+  "compatibility_date": "2024-09-23",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_BUCKET",
+      "bucket_name": "ca-test-series-pdf-storage",
+      "preview_bucket_name": "ca-test-series-pdf-storage-dev"
+    }
+  ],
+  "vars": {
+    "NODE_ENV": "production"
+  }
+}
