@@ -10,6 +10,5 @@
       "preview_bucket_name": "ca-test-series-pdf-storage-dev"
     }
   ],
-  "vars": { "NODE_ENV": "production" }
-}
    "vars": { "NODE_ENV": "production", "SUPABASE_URL": "https://tdtppuqpoivkztrlqmny.supabase.co" }
+  }
