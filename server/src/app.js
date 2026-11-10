@@ -30,8 +30,11 @@ app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'API route not found' });
 });
 
-app.use((err, _req, res, _next) => {
-  console.error(err);
+app.use((err, _req, res, next) => {
+  console.error('[API Error]:', err);
+  if (res.headersSent) {
+    return next(err);
+  }
   res.status(500).json({ error: err.message || 'Server error' });
 });
 

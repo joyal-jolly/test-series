@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
-import { hashPassword, signToken, verifyPassword } from '../auth.js';
+import {
+  hashPassword,
+  signToken,
+  verifyPassword,
+  generateOtp,
+  createOtpToken,
+  verifyOtpToken,
+} from '../auth.js';
+import { sendOtpEmail } from '../email.js';
 import { dbService } from '../db.js';
 import { requireAuth } from '../middleware.js';
 
@@ -16,9 +24,52 @@ function publicUser(user) {
   };
 }
 
-router.post('/register', async (req, res, next) => {
+/**
+ * Send 4-digit verification code to the entered email during student registration.
+ */
+router.post('/send-otp', async (req, res) => {
   try {
-    const { name, email, password, caLevel, batch, phone } = req.body || {};
+    const { email } = req.body || {};
+    if (!email?.trim()) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const normalized = email.trim().toLowerCase();
+    if (!emailRegex.test(normalized)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    // Check existing email (wrapped so a temporary DB error doesn't completely block OTP request)
+    try {
+      const existing = await dbService.getUserByEmail(normalized);
+      if (existing) {
+        return res.status(409).json({ error: 'This email is already registered. Please log in.' });
+      }
+    } catch (dbErr) {
+      console.warn('[send-otp] DB check skipped:', dbErr.message);
+    }
+
+    const otp = generateOtp();
+    const otpToken = createOtpToken(normalized, otp);
+
+    await sendOtpEmail({ email: normalized, otp });
+
+    return res.json({
+      message: `A 4-digit verification code was sent to ${normalized}.`,
+      otpToken,
+    });
+  } catch (err) {
+    console.error('[send-otp Error]:', err);
+    return res.status(400).json({
+      error: err.message || 'Failed to send verification code. Please check your email or try again.',
+    });
+  }
+});
+
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, caLevel, batch, phone, otp, otpToken } = req.body || {};
     if (
       !name?.trim() ||
       !email?.trim() ||
@@ -33,6 +84,19 @@ router.post('/register', async (req, res, next) => {
     }
 
     const normalized = email.trim().toLowerCase();
+
+    // Verify 4-digit OTP
+    if (!otp?.trim() || !otpToken?.trim()) {
+      return res.status(400).json({ error: 'Email verification code is required. Please verify your email.' });
+    }
+
+    const isValidOtp = verifyOtpToken(normalized, otp.trim(), otpToken.trim());
+    if (!isValidOtp) {
+      return res.status(400).json({
+        error: 'Invalid or expired 4-digit verification code. Please request a new code.',
+      });
+    }
+
     const existing = await dbService.getUserByEmail(normalized);
     if (existing) {
       return res.status(409).json({ error: 'Email already registered' });
@@ -59,9 +123,10 @@ router.post('/register', async (req, res, next) => {
     await dbService.createUser(user);
 
     const token = signToken(user);
-    res.status(201).json({ token, user: publicUser(user) });
+    return res.status(201).json({ token, user: publicUser(user) });
   } catch (err) {
-    next(err);
+    console.error('[register Error]:', err);
+    return res.status(400).json({ error: err.message || 'Registration failed' });
   }
 });
 

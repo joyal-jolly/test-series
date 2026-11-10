@@ -1,5 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Polyfill WebSocket for Node.js 20 local environment if not natively present.
+// In Cloudflare Workers, globalThis.WebSocket is already provided natively.
+if (typeof globalThis.WebSocket === 'undefined') {
+  try {
+    const wsModule = await import('ws');
+    globalThis.WebSocket = wsModule.default || wsModule;
+  } catch {}
+}
+
 let client = null;
 
 function getClient() {

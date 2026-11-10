@@ -1208,6 +1208,140 @@ label {
   box-shadow: 0 4px 14px rgba(13, 56, 99, 0.08);
 }
 
+/* ─── OTP Verification Component Styles ─────────────────────────── */
+.otp-card-head {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.otp-icon-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(15, 42, 71, 0.08);
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+
+[data-theme="dark"] .otp-icon-wrap {
+  background: rgba(200, 105, 67, 0.15);
+  color: var(--brand-orange);
+}
+
+.otp-email-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--accent-soft);
+  color: var(--ink);
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin: 0.5rem 0;
+  word-break: break-all;
+}
+
+.otp-edit-email-btn {
+  background: none;
+  border: none;
+  color: var(--brand-orange);
+  cursor: pointer;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  padding: 0;
+  margin-left: 0.25rem;
+  font-weight: 600;
+}
+
+.otp-inputs-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0 1rem;
+}
+
+.otp-digit-box {
+  width: 58px;
+  height: 64px;
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+  font-family: 'Courier New', Courier, monospace;
+  color: var(--ink);
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  padding: 0;
+}
+
+.otp-digit-box:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 42, 71, 0.15);
+  transform: translateY(-2px);
+}
+
+[data-theme="dark"] .otp-digit-box:focus {
+  border-color: var(--brand-orange);
+  box-shadow: 0 0 0 3px rgba(200, 105, 67, 0.25);
+}
+
+.otp-digit-box.filled {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.otp-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 1rem 0 1.25rem;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.otp-resend-btn {
+  background: none;
+  border: none;
+  color: var(--brand-orange);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.88rem;
+  transition: opacity 0.15s ease;
+}
+
+.otp-resend-btn:disabled {
+  color: var(--ink-soft);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.otp-resend-btn:not(:disabled):hover {
+  text-decoration: underline;
+}
+
+.otp-info-callout {
+  background: rgba(15, 42, 71, 0.04);
+  border-left: 3px solid var(--accent);
+  padding: 0.65rem 0.85rem;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  margin-bottom: 1.25rem;
+  line-height: 1.45;
+}
+
+[data-theme="dark"] .otp-info-callout {
+  background: rgba(255, 255, 255, 0.03);
+  border-left-color: var(--brand-orange);
+}
+
 .demo-creds {
   display: grid;
   gap: 0.35rem;

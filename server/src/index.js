@@ -21,12 +21,15 @@ import filesRoutes from './routes/files.js';
 const PORT = process.env.PORT || 4000;
 
 async function initializeDatabase() {
-  const conn = await testSupabaseConnection();
-  if (conn.connected) {
-    console.log(`[Database] Connected to Supabase PostgreSQL successfully! (Users: ${conn.userCount})`);
-  } else {
-    console.error(`[Database] FATAL: Supabase connection failed — ${conn.error}`);
-    process.exit(1);
+  try {
+    const conn = await testSupabaseConnection();
+    if (conn.connected) {
+      console.log(`[Database] Connected to Supabase PostgreSQL successfully! (Users: ${conn.userCount})`);
+    } else {
+      console.warn(`[Database] Warning: Supabase connection check returned: ${conn.error}. Server will continue running.`);
+    }
+  } catch (err) {
+    console.warn(`[Database] Warning: Initial connection check failed (${err.message}). Server will continue running.`);
   }
 }
 
@@ -53,7 +56,7 @@ app.use('/api/contact', contactRoutes);
 const clientDist = path.resolve(__dirname, '../../client/dist');
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
-  app.get('*', (req, res, next) => {
+  app.use((req, res, next) => {
     if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
       return next();
     }
