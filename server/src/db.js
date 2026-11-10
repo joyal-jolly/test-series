@@ -1,4 +1,4 @@
-﻿import { supabase } from './supabase.js';
+import { supabase } from './supabase.js';
 
 // -----------------------------------------------------------------------------
 // Unified Supabase Database Operations
@@ -31,6 +31,17 @@ export const dbService = {
     const { error } = await supabase.from('users').insert(user);
     if (error) throw new Error(error.message);
     return user;
+  },
+
+  async updateUser(id, updates) {
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data || null;
   },
 
   async updateUserStatus(id, status) {
@@ -382,7 +393,7 @@ export const dbService = {
     return entry;
   },
 
-  // ── Group Result Publications ─────────────────────────────────────────────────
+  // -- Group Result Publications -------------------------------------------------
 
   async upsertGroupResultPublication({ studentId, groupId, result, feedback, totalMarksAwarded, totalMaxMarks, overallPct, publishedBy }) {
     const id = `${studentId}_${groupId}`;

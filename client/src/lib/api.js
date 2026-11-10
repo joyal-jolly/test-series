@@ -131,7 +131,10 @@ async function request(path, options) {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  // Strip internal options before passing to native fetch
+  const { cache: _cache, cacheTtl: _cacheTtl, ...fetchOptions } = options;
+
+  const res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });
   const contentType = res.headers.get('content-type') || '';
   if (contentType.includes('text/html')) {
     const text = await res.text();

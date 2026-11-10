@@ -1166,6 +1166,7 @@ export function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [activeRole, setActiveRole] = useState('student');
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
 
   // Add User modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1190,9 +1191,10 @@ export function AdminUsers() {
 
   function reload() {
     setLoading(true);
+    setFetchError('');
     api('/api/admin/users', { cache: false })
       .then((d) => { setUsers(d.users || []); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch((err) => { setFetchError(err.message || 'Failed to load users'); setLoading(false); });
   }
 
   useEffect(() => { reload(); }, []);
@@ -1238,7 +1240,13 @@ export function AdminUsers() {
   // ── Edit User ──
   function openEdit(u) {
     setEditUser(u);
-    setEditForm({ name: u.name, phone: u.phone || '', role: u.role });
+    setEditForm({
+      name: u.name,
+      phone: u.phone || '',
+      role: u.role,
+      caLevel: u.profile?.caLevel || '',
+      batch: u.profile?.batch || '',
+    });
     setEditError('');
   }
 
@@ -1249,7 +1257,12 @@ export function AdminUsers() {
     try {
       await api(`/api/admin/users/${editUser.id}`, {
         method: 'PATCH',
-        body: { name: editForm.name, phone: editForm.phone, role: editForm.role },
+        body: {
+          name: editForm.name,
+          phone: editForm.phone,
+          role: editForm.role,
+          ...(editUser.role === 'student' ? { caLevel: editForm.caLevel, batch: editForm.batch } : {}),
+        },
       });
       setEditUser(null);
       reload();
@@ -1316,6 +1329,11 @@ export function AdminUsers() {
       <div className="panel" style={{ marginTop: '1rem' }}>
         {loading ? (
           <p className="muted">Loading…</p>
+        ) : fetchError ? (
+          <div style={{ textAlign: 'center', padding: '2.5rem' }}>
+            <p className="error" style={{ marginBottom: '1rem' }}>⚠ {fetchError}</p>
+            <button className="btn ghost" onClick={reload}>Retry</button>
+          </div>
         ) : filtered.length === 0 ? (
           <p className="muted" style={{ textAlign: 'center', padding: '2.5rem' }}>
             No {activeRole}s found.
@@ -1326,6 +1344,9 @@ export function AdminUsers() {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
+                {activeRole === 'student' && <th>CA Level</th>}
+                {activeRole === 'student' && <th>Student ID</th>}
+                {activeRole === 'student' && <th>Batch</th>}
                 <th>Phone</th>
                 <th style={{ textAlign: 'center' }}>Actions</th>
               </tr>
@@ -1337,6 +1358,9 @@ export function AdminUsers() {
                     <strong>{u.name}</strong>
                   </td>
                   <td className="muted" style={{ fontSize: '0.88rem' }}>{u.email}</td>
+                  {activeRole === 'student' && <td className="muted" style={{ fontSize: '0.88rem' }}>{u.profile?.caLevel || '—'}</td>}
+                  {activeRole === 'student' && <td className="muted" style={{ fontSize: '0.88rem', fontFamily: 'monospace' }}>{u.profile?.studentId || '—'}</td>}
+                  {activeRole === 'student' && <td className="muted" style={{ fontSize: '0.88rem' }}>{u.profile?.batch || '—'}</td>}
                   <td className="muted" style={{ fontSize: '0.88rem' }}>{u.phone || '—'}</td>
                   <td>
                     <div className="table-actions" style={{ justifyContent: 'center', gap: '0.35rem' }}>
@@ -1506,6 +1530,27 @@ export function AdminUsers() {
                   placeholder="e.g. +91 9876543210"
                 />
               </label>
+              {editUser.role === 'student' && (
+                <label>
+                  CA Level
+                  <select value={editForm.caLevel} onChange={(e) => setEditForm({ ...editForm, caLevel: e.target.value })}>
+                    <option value="">— Select —</option>
+                    <option value="Foundation">Foundation</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Final">Final</option>
+                  </select>
+                </label>
+              )}
+              {editUser.role === 'student' && (
+                <label>
+                  Batch
+                  <input
+                    value={editForm.batch}
+                    onChange={(e) => setEditForm({ ...editForm, batch: e.target.value })}
+                    placeholder="e.g. 23, 24"
+                  />
+                </label>
+              )}
               <label>
                 Role
                 <select value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}>

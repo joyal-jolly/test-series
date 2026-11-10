@@ -171,6 +171,12 @@ router.patch('/users/:id', async (req, res, next) => {
     if (req.body.phone !== undefined) {
       updates.profile = { ...(user.profile || {}), phone: req.body.phone.trim() };
     }
+    if (req.body.caLevel !== undefined) {
+      updates.profile = { ...(updates.profile || user.profile || {}), caLevel: req.body.caLevel.trim() };
+    }
+    if (req.body.batch !== undefined) {
+      updates.profile = { ...(updates.profile || user.profile || {}), batch: req.body.batch.trim() };
+    }
     if (req.body.password) {
       updates.passwordHash = hashPassword(req.body.password);
     }
