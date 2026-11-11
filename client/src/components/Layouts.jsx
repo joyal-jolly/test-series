@@ -354,17 +354,6 @@ export function PortalLayout({ title, links, children }) {
           >
             <span>Question Paper Library ↗</span>
           </Link>
-          <button
-            type="button"
-            className="portal-nav-logout-btn"
-            onClick={() => {
-              setIsMobileMenuOpen(false);
-              setShowLogoutConfirm(true);
-            }}
-          >
-            <LogoutIcon size={18} />
-            <span>Log out</span>
-          </button>
         </nav>
 
         <div className="sidebar-foot">

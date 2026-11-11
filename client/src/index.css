@@ -1542,30 +1542,6 @@ label {
   border-color: rgba(248, 113, 113, 0.45);
 }
 
-.portal-nav-logout-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  padding: 0.72rem 0.85rem;
-  border-radius: 0.7rem;
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5 !important;
-  border: 1px solid rgba(248, 113, 113, 0.25);
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
-  margin-top: 0.65rem;
-  transition: all 0.15s ease;
-  text-align: left;
-}
-
-.portal-nav-logout-btn:hover {
-  background: rgba(239, 68, 68, 0.22);
-  color: #ffffff !important;
-  border-color: rgba(248, 113, 113, 0.45);
-}
-
 .sidebar-foot-actions {
   display: flex;
   align-items: center;
