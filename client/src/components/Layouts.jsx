@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { ConfirmModal } from './ConfirmModal';
 
 function SunIcon() {
   return (
@@ -52,6 +54,7 @@ export function PublicLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   function portalPath() {
     if (!user) return '/login';
@@ -95,7 +98,7 @@ export function PublicLayout({ children }) {
               <button className="btn ghost" onClick={() => navigate(portalPath())}>
                 {user.name.split(' ')[0]} · Portal
               </button>
-              <button className="btn subtle" onClick={logout}>
+              <button className="btn subtle" onClick={() => setShowLogoutConfirm(true)}>
                 Logout
               </button>
             </>
@@ -151,6 +154,19 @@ export function PublicLayout({ children }) {
           </div>
         </div>
       </footer>
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Confirm Logout"
+        message="Are you sure you want to log out of your account?"
+        confirmText="Logout"
+        confirmVariant="primary"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          logout();
+          navigate('/');
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 }
@@ -159,6 +175,7 @@ export function PortalLayout({ title, links, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   return (
     <div className="portal-shell">
@@ -197,10 +214,7 @@ export function PortalLayout({ title, links, children }) {
             </button>
             <button
               className="btn subtle"
-              onClick={() => {
-                logout();
-                navigate('/');
-              }}
+              onClick={() => setShowLogoutConfirm(true)}
             >
               Logout
             </button>
@@ -216,6 +230,19 @@ export function PortalLayout({ title, links, children }) {
         </header>
         <div className="portal-content">{children}</div>
       </div>
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        title="Confirm Logout"
+        message="Are you sure you want to log out of the portal?"
+        confirmText="Logout"
+        confirmVariant="primary"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          logout();
+          navigate('/');
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 }
