@@ -1520,6 +1520,52 @@ label {
   max-width: 140px;
 }
 
+.portal-user-card-logout {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  color: #fca5a5;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: all 0.15s ease;
+}
+
+.portal-user-card-logout:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ffffff;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
+.portal-nav-logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.72rem 0.85rem;
+  border-radius: 0.7rem;
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5 !important;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.65rem;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.portal-nav-logout-btn:hover {
+  background: rgba(239, 68, 68, 0.22);
+  color: #ffffff !important;
+  border-color: rgba(248, 113, 113, 0.45);
+}
+
 .sidebar-foot-actions {
   display: flex;
   align-items: center;
@@ -2496,14 +2542,24 @@ label {
     bottom: 0;
     width: 310px;
     max-width: 86vw;
-    height: 100vh;
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 100dvh;
+    max-height: 100dvh;
     z-index: 250;
     transform: translateX(-100%);
     transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: none;
     overflow-y: auto;
-    padding: 1.25rem;
+    padding: 1.25rem 1.25rem max(2rem, env(safe-area-inset-bottom, 2rem)) 1.25rem;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-foot {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
   }
 
   .sidebar.portal-sidebar.mobile-open {

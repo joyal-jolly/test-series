@@ -23,6 +23,16 @@ function CloseIcon() {
   );
 }
 
+function LogoutIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <polyline points="16 17 21 12 16 7" />
+      <line x1="21" y1="12" x2="9" y2="12" />
+    </svg>
+  );
+}
+
 function SunIcon() {
   return (
     <svg
@@ -307,6 +317,18 @@ export function PortalLayout({ title, links, children }) {
               {user?.email && <span className="portal-user-email">{user.email}</span>}
             </div>
           </div>
+          <button
+            type="button"
+            className="portal-user-card-logout"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setShowLogoutConfirm(true);
+            }}
+            title="Log out"
+            aria-label="Log out"
+          >
+            <LogoutIcon size={16} />
+          </button>
         </div>
 
         <nav>
@@ -332,6 +354,17 @@ export function PortalLayout({ title, links, children }) {
           >
             <span>Question Paper Library ↗</span>
           </Link>
+          <button
+            type="button"
+            className="portal-nav-logout-btn"
+            onClick={() => {
+              setIsMobileMenuOpen(false);
+              setShowLogoutConfirm(true);
+            }}
+          >
+            <LogoutIcon size={18} />
+            <span>Log out</span>
+          </button>
         </nav>
 
         <div className="sidebar-foot">
