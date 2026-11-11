@@ -1,8 +1,27 @@
-import { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { ConfirmModal } from './ConfirmModal';
+
+function MenuIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
 
 function SunIcon() {
   return (
@@ -174,37 +193,151 @@ export function PublicLayout({ children }) {
 export function PortalLayout({ title, links, children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, toggleTheme } = useTheme();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Close mobile drawer on route changes
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isMobileMenuOpen]);
+
+  // Handle ESC key to close drawer
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') setIsMobileMenuOpen(false);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileMenuOpen]);
+
+  const totalBadges = links.reduce(
+    (sum, l) => sum + (typeof l.badge === 'number' && l.badge > 0 ? l.badge : 0),
+    0
+  );
 
   return (
     <div className="portal-shell">
-      <aside className="sidebar">
-        <Link to="/" className="brand compact">
-          <span className="brand-mark logo-mark">
-            <img src="/mentaura-logo.png" alt="Mentaura CA" className="brand-logo-img" />
-          </span>
-          <span className="brand-text">
+      {/* ── Mobile Top Header (only on screens <= 860px) ── */}
+      <header className="portal-mobile-header">
+        <Link to="/" className="portal-mobile-brand">
+          <img src="/mentaura-logo.png" alt="Mentaura CA" className="portal-mobile-logo" />
+          <div className="portal-mobile-title">
             <strong>Mentaura CA</strong>
             <em>{title}</em>
-          </span>
+          </div>
         </Link>
+        <div className="portal-mobile-actions">
+          <button
+            type="button"
+            className="theme-toggle portal-mobile-theme-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label="Toggle dark mode"
+          >
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </button>
+          <button
+            type="button"
+            className={`portal-menu-trigger ${isMobileMenuOpen ? 'active' : ''}`}
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label={isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+          >
+            {isMobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+            <span>Menu</span>
+            {totalBadges > 0 && <span className="nav-badge">{totalBadges}</span>}
+          </button>
+        </div>
+      </header>
+
+      {/* ── Mobile Drawer Backdrop ── */}
+      {isMobileMenuOpen && (
+        <div
+          className="portal-mobile-backdrop"
+          onClick={() => setIsMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Sidebar (Desktop standard / Mobile slide-out drawer) ── */}
+      <aside className={`sidebar portal-sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
+        <div className="portal-sidebar-head">
+          <Link to="/" className="brand compact" onClick={() => setIsMobileMenuOpen(false)}>
+            <span className="brand-mark logo-mark">
+              <img src="/mentaura-logo.png" alt="Mentaura CA" className="brand-logo-img" />
+            </span>
+            <span className="brand-text">
+              <strong>Mentaura CA</strong>
+              <em>{title}</em>
+            </span>
+          </Link>
+          <button
+            type="button"
+            className="portal-mobile-close-btn"
+            onClick={() => setIsMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+
+        {/* User Card in Menu tab */}
+        <div className="portal-user-card">
+          <div className="portal-user-avatar">
+            {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+          </div>
+          <div className="portal-user-details">
+            <strong className="portal-user-name">{user?.name || 'User'}</strong>
+            <div className="portal-user-meta">
+              <span className="portal-role-pill">{user?.role || 'Portal'}</span>
+              {user?.email && <span className="portal-user-email">{user.email}</span>}
+            </div>
+          </div>
+        </div>
+
         <nav>
           {links.map((l) => (
-            <NavLink key={l.to} to={l.to} end={l.end}>
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.end}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
               <span>{l.label}</span>
               {l.badge !== undefined && l.badge !== null && l.badge > 0 ? (
-                <span className="nav-badge" title={`${l.badge} pending assignment`}>
+                <span className="nav-badge" title={`${l.badge} pending`}>
                   {l.badge}
                 </span>
               ) : null}
             </NavLink>
           ))}
+          <Link
+            to="/papers"
+            className="portal-extra-nav-link"
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <span>Question Paper Library ↗</span>
+          </Link>
         </nav>
+
         <div className="sidebar-foot">
-          <p>{user?.name}</p>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div className="sidebar-foot-actions">
             <button
+              type="button"
               className="theme-toggle"
               onClick={toggleTheme}
               title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -213,23 +346,29 @@ export function PortalLayout({ title, links, children }) {
               {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
             </button>
             <button
-              className="btn subtle"
-              onClick={() => setShowLogoutConfirm(true)}
+              type="button"
+              className="btn subtle portal-logout-btn"
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                setShowLogoutConfirm(true);
+              }}
             >
               Logout
             </button>
           </div>
         </div>
       </aside>
+
       <div className="portal-main">
         <header className="portal-header">
           <h1>{title}</h1>
-          <Link to="/papers" className="btn ghost">
+          <Link to="/papers" className="btn ghost portal-desktop-library-link">
             Paper library
           </Link>
         </header>
         <div className="portal-content">{children}</div>
       </div>
+
       <ConfirmModal
         isOpen={showLogoutConfirm}
         title="Confirm Logout"
