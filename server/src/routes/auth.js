@@ -161,4 +161,61 @@ router.get('/me', requireAuth, async (req, res, next) => {
   }
 });
 
+/**
+ * Send OTP to the logged-in user's email for password change.
+ */
+router.post('/send-change-password-otp', requireAuth, async (req, res) => {
+  try {
+    const user = await dbService.getUserById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const otp = generateOtp();
+    const otpToken = createOtpToken(user.email, otp);
+
+    await sendOtpEmail({ email: user.email, otp });
+
+    return res.json({
+      message: `A verification code was sent to ${user.email}.`,
+      otpToken,
+    });
+  } catch (err) {
+    console.error('[send-change-password-otp Error]:', err);
+    return res.status(500).json({ error: err.message || 'Failed to send OTP. Please try again.' });
+  }
+});
+
+/**
+ * Verify OTP and update password for the logged-in user.
+ */
+router.post('/change-password', requireAuth, async (req, res) => {
+  try {
+    const { otp, otpToken, newPassword } = req.body || {};
+
+    if (!otp?.trim() || !otpToken?.trim()) {
+      return res.status(400).json({ error: 'Verification code is required.' });
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    }
+
+    const user = await dbService.getUserById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const isValidOtp = verifyOtpToken(user.email, otp.trim(), otpToken.trim());
+    if (!isValidOtp) {
+      return res.status(400).json({ error: 'Invalid or expired verification code. Please request a new one.' });
+    }
+
+    await dbService.updateUser(user.id, {
+      passwordHash: hashPassword(newPassword),
+      updatedAt: new Date().toISOString(),
+    });
+
+    return res.json({ message: 'Password changed successfully.' });
+  } catch (err) {
+    console.error('[change-password Error]:', err);
+    return res.status(500).json({ error: err.message || 'Failed to change password. Please try again.' });
+  }
+});
+
 export default router;

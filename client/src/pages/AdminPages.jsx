@@ -544,7 +544,7 @@ export function AdminPapers() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <h3 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {g.name}
-                    <span className="pill" style={{ fontSize: '0.74rem', background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
+                    <span className="pill pill-ca-level">
                       {g.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
                     </span>
                   </h3>
@@ -592,21 +592,19 @@ export function AdminPapers() {
         const expectedSubjects = g.numSubjectsPerSchedule || 3;
         return (
           <div
-            className="modal-backdrop"
+            className="modal-backdrop admin-group-modal-backdrop"
             onClick={() => setSelectedGroup(null)}
-            style={{ alignItems: 'flex-start', paddingTop: '3vh' }}
           >
             <div
-              className="modal-card"
+              className="modal-card admin-group-modal-card"
               onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: '860px', width: '96%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}
             >
               {/* Modal Header */}
-              <div className="modal-head" style={{ flexShrink: 0 }}>
+              <div className="modal-head admin-group-modal-head">
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
                     <h2 style={{ margin: 0 }}>{g.name}</h2>
-                    <span className="pill" style={{ fontSize: '0.75rem', background: '#e0e7ff', color: '#4338ca', fontWeight: 600 }}>
+                    <span className="pill pill-ca-level">
                       {g.caLevel === 'Final' ? 'CA Final' : 'CA Intermediate'}
                     </span>
                   </div>
@@ -614,16 +612,16 @@ export function AdminPapers() {
                 </div>
                 <button
                   type="button"
-                  className="btn subtle"
+                  className="btn subtle admin-modal-close-btn"
                   onClick={() => setSelectedGroup(null)}
-                  style={{ padding: '0.35rem 0.75rem', borderRadius: '50%', flexShrink: 0 }}
+                  title="Close"
                 >
                   ✕
                 </button>
               </div>
 
-              {/* Scrollable schedules list */}
-              <div style={{ overflowY: 'auto', flex: 1, padding: '1rem 1.5rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* Scrollable schedules list - scrolls the entire schedules section */}
+              <div className="admin-group-schedules-list">
                 {(g.schedules || []).map((sched) => {
                   const papers = sched.papers || [];
                   const canAddMore = papers.length < expectedSubjects;
@@ -631,44 +629,24 @@ export function AdminPapers() {
                   return (
                     <div
                       key={sched.scheduleNumber}
-                      style={{
-                        border: isUploaded ? '1.5px dashed var(--border, #d1d5db)' : '1px solid #000000ff',
-                        borderLeft: isUploaded ? '4px solid #9ca3af' : '4px solid #000000ff',
-                        borderRadius: '10px',
-                        background: isUploaded ? '#f5f5f7' : '#fafafa',
-                        overflow: 'hidden',
-                        opacity: isUploaded ? 0.55 : 1,
-                        transition: 'opacity 0.2s, border-color 0.2s',
-                      }}
+                      className={`admin-schedule-card ${isUploaded ? 'uploaded' : ''}`}
                     >
                       {/* Schedule Bar */}
-                      <div
-                        style={{
-                          padding: '0.85rem 1.25rem',
-                          background: '#f3f4f6',
-                          borderBottom: '1px solid var(--border, #e5e7eb)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          flexWrap: 'wrap',
-                          gap: '0.75rem',
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                          <strong style={{ fontSize: '1rem' }}>Schedule {sched.scheduleNumber}</strong>
+                      <div className="admin-schedule-bar">
+                        <div className="admin-schedule-bar-left">
+                          <strong className="admin-schedule-title">Schedule {sched.scheduleNumber}</strong>
                           <span className={`pill ${papers.length >= expectedSubjects ? 'published' : papers.length > 0 ? 'assigned' : 'draft'}`} style={{ fontSize: '0.78rem' }}>
                             {papers.length} / {expectedSubjects} Subjects Uploaded
                           </span>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                        <div className="admin-schedule-bar-right">
+                          <div className="admin-schedule-date-box">
                             <span className="muted">Scheduled Access:</span>
-                            <strong>{formatScheduleDate(sched.availableAt)}</strong>
+                            <strong className="admin-schedule-date-value">{formatScheduleDate(sched.availableAt)}</strong>
                             <button
                               type="button"
-                              className="btn subtle"
-                              style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                              className="btn subtle admin-schedule-btn"
                               onClick={() => openScheduleDateModal(g.id, g.name, sched.scheduleNumber, sched.availableAt)}
                             >
                               {sched.availableAt ? 'Change Date/Time' : 'Set Date/Time'}
@@ -678,8 +656,7 @@ export function AdminPapers() {
                           {canAddMore && (
                             <button
                               type="button"
-                              className="btn primary"
-                              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                              className="btn primary admin-schedule-upload-btn"
                               onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, null, sched.availableAt, papers)}
                             >
                               + Upload Subject Paper ({papers.length + 1}/{expectedSubjects})
@@ -689,66 +666,68 @@ export function AdminPapers() {
                       </div>
 
                       {/* Subject Papers in this Schedule */}
-                      <div style={{ padding: '0.75rem 1.25rem' }}>
+                      <div className="admin-schedule-body">
                         {papers.length === 0 ? (
-                          <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280', fontSize: '0.9rem' }}>
+                          <div className="admin-schedule-empty">
                             No subject question papers uploaded yet. Click <strong>&quot;+ Upload Subject Paper&quot;</strong> to upload papers for up to {expectedSubjects} subjects.
                           </div>
                         ) : (
-                          <table className="data-table" style={{ background: '#fff', borderRadius: '6px' }}>
-                            <thead>
-                              <tr>
-                                <th style={{ width: '14rem' }}>Subject</th>
-                                <th>Paper Title</th>
-                                <th>Subject Type</th>
-                                <th>Marks &amp; Duration</th>
-                                <th style={{ textAlign: 'right' }}>Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {papers.map((p) => (
-                                <tr key={p.id}>
-                                  <td>
-                                    <strong style={{ fontSize: '0.92rem' }}>{p.subjectName}</strong>
-                                    <div className="muted" style={{ fontSize: '0.78rem' }}>{p.caLevel}</div>
-                                  </td>
-                                  <td>
-                                    <span style={{ fontWeight: 500 }}>{p.title}</span>
-                                    {p.chapter && <div className="muted" style={{ fontSize: '0.78rem' }}>{p.chapter}</div>}
-                                  </td>
-                                  <td>
-                                    <span className="pill info" style={{ fontSize: '0.75rem' }}>{p.paperType}</span>
-                                  </td>
-                                  <td>
-                                    <span style={{ fontSize: '0.85rem' }}>{p.totalMarks} marks · {p.durationMinutes} min</span>
-                                  </td>
-                                  <td style={{ textAlign: 'right' }}>
-                                    <div className="table-actions" style={{ justifyContent: 'flex-end' }}>
-                                      <button
-                                        type="button"
-                                        className="btn subtle"
-                                        onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, p, sched.availableAt, papers)}
-                                      >
-                                        Edit
-                                      </button>
-                                      {p.pdfUrl && (
-                                        <a href={getAuthFileUrl(p.pdfUrl)} target="_blank" rel="noreferrer" className="btn subtle">
-                                          PDF
-                                        </a>
-                                      )}
-                                      <button
-                                        type="button"
-                                        className="btn subtle danger"
-                                        onClick={() => deletePaper(p.id, p.title)}
-                                      >
-                                        Remove
-                                      </button>
-                                    </div>
-                                  </td>
+                          <div className="admin-schedule-table-wrap">
+                            <table className="data-table admin-schedule-table">
+                              <thead>
+                                <tr>
+                                  <th style={{ minWidth: '9.5rem' }}>Subject</th>
+                                  <th style={{ minWidth: '10.5rem' }}>Paper Title</th>
+                                  <th style={{ minWidth: '6rem' }}>Subject Type</th>
+                                  <th style={{ minWidth: '7.5rem' }}>Marks &amp; Duration</th>
+                                  <th style={{ textAlign: 'right', minWidth: '9rem' }}>Actions</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {papers.map((p, pIdx) => (
+                                  <tr key={p.id ? `${p.id}-${pIdx}` : `paper-${sched.scheduleNumber}-${pIdx}`}>
+                                    <td>
+                                      <strong className="admin-paper-subject-name">{p.subjectName}</strong>
+                                      <div className="muted admin-paper-meta-sub">{p.caLevel}</div>
+                                    </td>
+                                    <td>
+                                      <span className="admin-paper-title">{p.title}</span>
+                                      {p.chapter && <div className="muted admin-paper-meta-sub">{p.chapter}</div>}
+                                    </td>
+                                    <td>
+                                      <span className="pill info admin-paper-pill" style={{ fontSize: '0.75rem' }}>{p.paperType}</span>
+                                    </td>
+                                    <td>
+                                      <span className="admin-paper-marks">{p.totalMarks} marks · {p.durationMinutes} min</span>
+                                    </td>
+                                    <td style={{ textAlign: 'right' }}>
+                                      <div className="table-actions admin-paper-actions">
+                                        <button
+                                          type="button"
+                                          className="btn subtle admin-table-btn"
+                                          onClick={() => openPaperModal(g.id, g.name, sched.scheduleNumber, p, sched.availableAt, papers)}
+                                        >
+                                          Edit
+                                        </button>
+                                        {p.pdfUrl && (
+                                          <a href={getAuthFileUrl(p.pdfUrl)} target="_blank" rel="noreferrer" className="btn subtle admin-table-btn">
+                                            PDF
+                                          </a>
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="btn subtle danger admin-table-btn-danger"
+                                          onClick={() => deletePaper(p.id, p.title)}
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         )}
                       </div>
                     </div>

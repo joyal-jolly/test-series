@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { v4 as uuid } from 'uuid';
-import { dbService } from '../db.js';
 import { optionalAuth } from '../middleware.js';
+import { sendContactEmails } from '../email.js';
 
 const router = Router();
 
@@ -12,18 +11,22 @@ router.post('/', optionalAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Name, email, and message are required' });
     }
 
-    const entry = {
-      id: uuid(),
-      name: name.trim(),
-      email: email.trim(),
-      subject: subject?.trim() || 'General enquiry',
-      message: message.trim(),
-      userId: req.user?.id || null,
-      createdAt: new Date().toISOString(),
-    };
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanSubject = subject?.trim() || 'General enquiry';
+    const cleanMessage = message.trim();
 
-    await dbService.createContactMessage(entry);
-    res.status(201).json({ message: 'Thanks! We will get back to you soon.', id: entry.id });
+    // Dispatch emails (admin notification to mentauraca.testseries@gmail.com + sender acknowledgment)
+    await sendContactEmails({
+      name: cleanName,
+      email: cleanEmail,
+      subject: cleanSubject,
+      message: cleanMessage,
+    });
+
+    res.status(200).json({
+      message: 'Thanks! Your message has been sent. We will get back to you soon.',
+    });
   } catch (err) {
     next(err);
   }

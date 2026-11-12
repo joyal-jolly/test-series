@@ -281,32 +281,66 @@ export const dbService = {
   async getQuestionPaperGroups() {
     const { data, error } = await supabase.from('question_paper_groups').select('*').order('createdAt', { ascending: false });
     if (error) throw new Error(error.message);
-    return data || [];
+    return (data || []).map((g) => ({
+      ...g,
+      caLevel: g.caLevel || g.calevel || g.ca_level || 'Intermediate',
+    }));
   },
 
   async getQuestionPaperGroupById(id) {
     const { data, error } = await supabase.from('question_paper_groups').select('*').eq('id', id).maybeSingle();
     if (error) throw new Error(error.message);
-    return data || null;
+    if (!data) return null;
+    return {
+      ...data,
+      caLevel: data.caLevel || data.calevel || data.ca_level || 'Intermediate',
+    };
   },
 
   async createQuestionPaperGroup(group) {
-    const { error } = await supabase.from('question_paper_groups').insert(group);
-    if (error) throw new Error(error.message);
+    let payload = { ...group };
+    let res = await supabase.from('question_paper_groups').insert(payload);
+
+    if (res.error && res.error.message.includes('caLevel')) {
+      const { caLevel, ...rest } = payload;
+      const resLower = await supabase.from('question_paper_groups').insert({ ...rest, calevel: caLevel });
+      if (!resLower.error) return group;
+      res = await supabase.from('question_paper_groups').insert(rest);
+    }
+
+    if (res.error && res.error.message.includes('numSubjectsPerSchedule')) {
+      const { numSubjectsPerSchedule, ...rest } = payload;
+      res = await supabase.from('question_paper_groups').insert(rest);
+    }
+
+    if (res.error) throw new Error(res.error.message);
     return group;
   },
 
   async updateQuestionPaperGroup(id, updates) {
     const now = new Date().toISOString();
-    const payload = { ...updates, updatedAt: now };
-    const { data, error } = await supabase
+    let payload = { ...updates, updatedAt: now };
+    let res = await supabase
       .from('question_paper_groups')
       .update(payload)
       .eq('id', id)
       .select()
       .maybeSingle();
-    if (error) throw new Error(error.message);
-    return data || null;
+
+    if (res.error && res.error.message.includes('caLevel')) {
+      const { caLevel, ...rest } = payload;
+      const resLower = await supabase.from('question_paper_groups').update({ ...rest, calevel: caLevel }).eq('id', id).select().maybeSingle();
+      if (!resLower.error) return resLower.data;
+      res = await supabase.from('question_paper_groups').update(rest).eq('id', id).select().maybeSingle();
+    }
+
+    if (res.error && res.error.message.includes('numSubjectsPerSchedule')) {
+      const { numSubjectsPerSchedule, ...rest } = payload;
+      res = await supabase.from('question_paper_groups').update(rest).eq('id', id).select().maybeSingle();
+    }
+
+    if (res.error) throw new Error(res.error.message);
+    return res.data || null;
   },
 
   async deleteQuestionPaperGroup(id) {

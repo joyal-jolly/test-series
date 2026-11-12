@@ -66,7 +66,7 @@ export default function AboutPage() {
           <div className="about-card">
             <h3>1-on-1 Faculty Mentoring</h3>
             <p>
-              Continuous doubt-clearing sessions, psychological counseling, and personalized guidance led by experienced
+              Continuous doubt-clearing sessions,p and personalized guidance led by experienced
               Chartered Accountants and educators.
             </p>
           </div>
@@ -133,26 +133,6 @@ export default function AboutPage() {
           </div>
         </div>
 
-        {/* Founding Leadership */}
-        <div className="about-section-head">
-          <h2>Founding Leadership</h2>
-          <p>Founded by an enthusiastic team committed to raising the standard of CA education in Kerala.</p>
-        </div>
-
-        <div className="founders-grid">
-          <div className="founder-card">
-            <strong>CA Jacobkutty Jaison</strong>
-            <span>Co-Founder &amp; Mentor</span>
-          </div>
-          <div className="founder-card">
-            <strong>John Joseph</strong>
-            <span>Co-Founder</span>
-          </div>
-          <div className="founder-card">
-            <strong>Iwin Johny</strong>
-            <span>Co-Founder</span>
-          </div>
-        </div>
 
         {/* Official Website CTA Panel */}
         <div className="about-cta-panel">

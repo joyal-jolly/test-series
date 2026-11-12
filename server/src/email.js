@@ -223,3 +223,208 @@ export async function sendOtpEmail({ email, otp }) {
 
   return { provider: 'dev-console', simulated: true, otp };
 }
+
+/**
+ * Sends a generic HTML email via Resend or Brevo.
+ */
+export async function sendEmail({ to, subject, html, replyTo, toName }) {
+  const { resendKey, brevoKey, rawFrom } = await getEmailConfig();
+
+  // 1. Resend
+  if (resendKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: rawFrom,
+          to: Array.isArray(to) ? to : [to],
+          reply_to: replyTo || undefined,
+          subject,
+          html,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || `Resend failed with status ${res.status}`);
+      }
+      return { provider: 'resend', id: data.id };
+    } catch (err) {
+      console.error('[sendEmail/Resend Error]:', err.message);
+      throw err;
+    }
+  }
+
+  // 2. Brevo
+  if (brevoKey) {
+    const sender = parseFromAddress(rawFrom);
+    const toList = Array.isArray(to)
+      ? to.map((e) => ({ email: e }))
+      : [{ email: to, name: toName || undefined }];
+
+    try {
+      const payload = {
+        sender,
+        to: toList,
+        subject,
+        htmlContent: html,
+      };
+      if (replyTo) {
+        payload.replyTo = { email: replyTo };
+      }
+
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || `Brevo failed with status ${res.status}`);
+      }
+      return { provider: 'brevo', messageId: data.messageId };
+    } catch (err) {
+      console.error('[sendEmail/Brevo Error]:', err.message);
+      throw err;
+    }
+  }
+
+  // 3. Fallback dev console
+  console.log('\n======================================================');
+  console.log(`[EMAIL NOTICE] ✉️  To: ${to} | Subject: ${subject}`);
+  console.log('Set RESEND_API_KEY or BREVO_API_KEY in server/.env to send real emails.');
+  console.log('======================================================\n');
+  return { provider: 'dev-console', simulated: true };
+}
+
+/**
+ * Send contact form submission email to Admin and acknowledgment to User.
+ */
+export async function sendContactEmails({ name, email, subject, message }) {
+  const adminEmail = process.env.CONTACT_RECEIVER_EMAIL || process.env.ADMIN_EMAIL || 'mentauraca.testseries@gmail.com';
+  const cleanSubject = subject?.trim() || 'General Enquiry';
+
+  // 1. Notification to Campus Admin
+  const adminHtml = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
+  <div style="max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+    <div style="background-color: #0f172a; padding: 20px 24px; color: #ffffff;">
+      <h2 style="margin: 0; font-size: 18px;">New Contact &amp; Admission Enquiry</h2>
+      <p style="margin: 4px 0 0; color: #94a3b8; font-size: 13px;">Mentaura CA Assessment Portal</p>
+    </div>
+    <div style="padding: 24px; color: #1e293b; font-size: 14px; line-height: 1.6;">
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; width: 100px; font-weight: 600;">From:</td>
+          <td style="padding: 8px 0; font-weight: bold; color: #0f172a;">${escapeHtml(name)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; font-weight: 600;">Email:</td>
+          <td style="padding: 8px 0;"><a href="mailto:${escapeHtml(email)}" style="color: #2563eb;">${escapeHtml(email)}</a></td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; font-weight: 600;">Subject:</td>
+          <td style="padding: 8px 0; color: #0f172a;">${escapeHtml(cleanSubject)}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #64748b; font-weight: 600;">Time:</td>
+          <td style="padding: 8px 0; color: #64748b;">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST</td>
+        </tr>
+      </table>
+      <div style="border-top: 1px solid #e2e8f0; padding-top: 16px;">
+        <strong style="display: block; margin-bottom: 8px; color: #334155;">Message:</strong>
+        <div style="background: #f1f5f9; padding: 16px; border-radius: 8px; white-space: pre-wrap; font-size: 14px; color: #0f172a; border-left: 4px solid #3b82f6;">${escapeHtml(message)}</div>
+      </div>
+      <p style="margin-top: 24px; font-size: 13px; color: #64748b;">
+        💡 You can reply directly to this email to respond to <strong>${escapeHtml(name)}</strong> (${escapeHtml(email)}).
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  // 2. Acknowledgment to Sender
+  const userHtml = `
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; padding: 24px;">
+  <div style="max-width: 540px; margin: 0 auto; background: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+    <div style="background-color: #0f172a; padding: 22px 26px; color: #ffffff;">
+      <h2 style="margin: 0; font-size: 18px;">Thank You for Contacting Mentaura CA</h2>
+      <p style="margin: 4px 0 0; color: #94a3b8; font-size: 13px;">Residential CA Campus &middot; Vazhakulam, Ernakulam</p>
+    </div>
+    <div style="padding: 24px 26px; color: #1e293b; font-size: 14px; line-height: 1.65;">
+      <p style="margin-top: 0;">Dear <strong>${escapeHtml(name)}</strong>,</p>
+      <p>
+        Thank you for reaching out to us regarding <strong>${escapeHtml(cleanSubject)}</strong>. We have successfully received your enquiry.
+      </p>
+      <p>
+        Our campus admissions and academic team is reviewing your message and will respond to you shortly at <strong>${escapeHtml(email)}</strong>.
+      </p>
+      <div style="background: #f8fafc; border: 1px dashed #cbd5e1; padding: 14px 18px; border-radius: 8px; margin: 20px 0; font-size: 13px; color: #475569;">
+        <strong style="color: #1e293b; display: block; margin-bottom: 4px;">Summary of your message:</strong>
+        <p style="margin: 0; white-space: pre-wrap;">${escapeHtml(message)}</p>
+      </div>
+      <p style="font-size: 13px; color: #64748b;">
+        If you have urgent questions, feel free to call or WhatsApp us directly at <a href="tel:+916282955052" style="color: #2563eb; font-weight: 600;">+91 6282955052</a>.
+      </p>
+      <p style="margin-bottom: 0; margin-top: 24px; color: #334155; font-size: 13px;">
+        Warm regards,<br>
+        <strong>Mentaura CA Academic Office</strong><br>
+        Kadalikadu P.O., Vazhakulam, Ernakulam, Kerala
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  // Helper escape
+  function escapeHtml(str = '') {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // Attempt to deliver notification to Admin (with reply-to as sender)
+  let adminRes = null;
+  try {
+    adminRes = await sendEmail({
+      to: adminEmail,
+      subject: `New Enquiry from ${name}: ${cleanSubject}`,
+      html: adminHtml,
+      replyTo: email,
+    });
+  } catch (err) {
+    console.error('[sendContactEmails - Admin Error]:', err.message);
+  }
+
+  // Attempt to deliver confirmation to User
+  let userRes = null;
+  try {
+    userRes = await sendEmail({
+      to: email,
+      toName: name,
+      subject: `Enquiry Received: ${cleanSubject} — Mentaura CA`,
+      html: userHtml,
+    });
+  } catch (err) {
+    console.error('[sendContactEmails - User Acknowledgment Error]:', err.message);
+  }
+
+  return { adminRes, userRes };
+}

@@ -472,7 +472,6 @@ export function ReviewSubmissionPage() {
                       if (error) setError('');
                     }}
                     className="rev-marks-input"
-                    style={{ color: '#000000' }}
                   />
                   {data?.assignment?.totalMarks && (
                     <span className="rev-marks-max">/ {data.assignment.totalMarks}</span>

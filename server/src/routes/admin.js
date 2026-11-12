@@ -260,12 +260,13 @@ router.get('/groups', async (_req, res, next) => {
 
       const schedules = [];
       for (let i = 1; i <= g.numSchedules; i++) {
-        const schedRecord = groupSchedules.find((s) => s.scheduleNumber === i);
+        const schedRecord = groupSchedules.find((s) => Number(s.scheduleNumber) === i);
         const schedPapers = papers
-          .filter((p) => p.scheduleNumber === i)
+          .filter((p) => Number(p.scheduleNumber) === i)
           .map((paper) => {
             const subject = subjects.find((s) => s.id === paper.subjectId);
             return {
+              ...paper,
               id: paper.id,
               title: paper.title,
               subjectId: paper.subjectId,

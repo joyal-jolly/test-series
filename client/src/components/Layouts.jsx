@@ -33,6 +33,15 @@ function LogoutIcon({ size = 18 }) {
   );
 }
 
+function UserDetailsIcon({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+    </svg>
+  );
+}
+
 function SunIcon() {
   return (
     <svg
@@ -76,6 +85,210 @@ function MoonIcon() {
     >
       <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
     </svg>
+  );
+}
+
+/**
+ * User Details + Change Password Modal
+ * Shown when the user clicks the profile icon in the sidebar user card.
+ */
+function UserDetailsModal({ user, onClose }) {
+  // Steps: 'details' | 'otp-sent' | 'set-password' | 'done'
+  const [step, setStep] = useState('details');
+  const [otpToken, setOtpToken] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
+
+  function getToken() {
+    return localStorage.getItem('ca_token') || '';
+  }
+
+  async function sendOtp() {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/auth/send-change-password-otp', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send OTP');
+      setOtpToken(data.otpToken);
+      setStep('otp-sent');
+      setMsg(`A 4-digit code was sent to ${user.email}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function verifyOtpAndProceed() {
+    if (!otp.trim()) { setError('Please enter the verification code.'); return; }
+    setStep('set-password');
+    setError('');
+  }
+
+  async function savePassword() {
+    setError('');
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters.'); return; }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match.'); return; }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+        body: JSON.stringify({ otp: otp.trim(), otpToken, newPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to change password');
+      setStep('done');
+      setMsg('Password changed successfully!');
+    } catch (e) {
+      setError(e.message);
+      // If OTP error, go back to OTP step
+      if (e.message.toLowerCase().includes('otp') || e.message.toLowerCase().includes('code')) {
+        setStep('otp-sent');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop user-details-modal-backdrop" onClick={onClose}>
+      <div className="modal-card user-details-modal-card" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="modal-head user-details-modal-head">
+          <h3 style={{ margin: 0, fontSize: '1.05rem' }}>
+            {step === 'details' ? 'My Account' :
+             step === 'otp-sent' ? 'Enter Verification Code' :
+             step === 'set-password' ? 'Set New Password' : 'Success'}
+          </h3>
+          <button type="button" className="btn subtle" onClick={onClose} style={{ padding: '0.3rem 0.6rem', borderRadius: '50%' }}>✕</button>
+        </div>
+
+        <div className="user-details-modal-body">
+          {/* ── DETAILS STEP ── */}
+          {step === 'details' && (
+            <>
+              <div className="user-details-avatar-row">
+                <div className="user-details-avatar">
+                  {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+                </div>
+                <div>
+                  <div className="user-details-name">{user?.name}</div>
+                  <span className="portal-role-pill" style={{ textTransform: 'uppercase', fontSize: '0.72rem' }}>{user?.role}</span>
+                </div>
+              </div>
+              <div className="user-details-fields">
+                <div className="user-details-field">
+                  <span className="user-details-label">Email</span>
+                  <span className="user-details-value">{user?.email}</span>
+                </div>
+                {user?.profile?.caLevel && (
+                  <div className="user-details-field">
+                    <span className="user-details-label">CA Level</span>
+                    <span className="user-details-value">{user.profile.caLevel}</span>
+                  </div>
+                )}
+                {user?.profile?.phone && (
+                  <div className="user-details-field">
+                    <span className="user-details-label">Phone</span>
+                    <span className="user-details-value">{user.profile.phone}</span>
+                  </div>
+                )}
+              </div>
+              {error && <div className="form-error" style={{ marginTop: '0.5rem' }}>{error}</div>}
+              <div className="user-details-actions">
+                <button type="button" className="btn primary" onClick={sendOtp} disabled={loading}>
+                  {loading ? 'Sending…' : 'Change Password'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── OTP STEP ── */}
+          {step === 'otp-sent' && (
+            <>
+              <p className="user-details-hint">{msg}</p>
+              <label className="form-label">Verification Code</label>
+              <input
+                className="form-input"
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="Enter 4-digit code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                autoFocus
+              />
+              {error && <div className="form-error">{error}</div>}
+              <div className="user-details-actions">
+                <button type="button" className="btn subtle" onClick={() => setStep('details')}>Back</button>
+                <button type="button" className="btn primary" onClick={verifyOtpAndProceed} disabled={!otp.trim()}>
+                  Verify Code
+                </button>
+              </div>
+              <div className="user-details-resend">
+                Didn&apos;t receive the code?{' '}
+                <button type="button" className="link-btn" onClick={sendOtp} disabled={loading}>
+                  {loading ? 'Sending…' : 'Resend'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── SET PASSWORD STEP ── */}
+          {step === 'set-password' && (
+            <>
+              <p className="user-details-hint">Create a new password for your account.</p>
+              <label className="form-label">New Password</label>
+              <input
+                className="form-input"
+                type="password"
+                placeholder="Min. 6 characters"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoFocus
+              />
+              <label className="form-label" style={{ marginTop: '0.75rem' }}>Confirm Password</label>
+              <input
+                className="form-input"
+                type="password"
+                placeholder="Re-enter new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+              {error && <div className="form-error">{error}</div>}
+              <div className="user-details-actions">
+                <button type="button" className="btn subtle" onClick={() => setStep('otp-sent')}>Back</button>
+                <button type="button" className="btn primary" onClick={savePassword} disabled={loading}>
+                  {loading ? 'Saving…' : 'Save Password'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── DONE STEP ── */}
+          {step === 'done' && (
+            <>
+              <div className="user-details-success">
+                <span className="user-details-success-icon">✓</span>
+                <p>{msg}</p>
+              </div>
+              <div className="user-details-actions">
+                <button type="button" className="btn primary" onClick={onClose}>Close</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -207,6 +420,7 @@ export function PortalLayout({ title, links, children }) {
   const { theme, toggleTheme } = useTheme();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showUserDetails, setShowUserDetails] = useState(false);
 
   // Close mobile drawer on route changes
   useEffect(() => {
@@ -305,7 +519,7 @@ export function PortalLayout({ title, links, children }) {
           </button>
         </div>
 
-        {/* User Card in Menu tab */}
+        {/* User Card — shows name + role, details icon button */}
         <div className="portal-user-card">
           <div className="portal-user-avatar">
             {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
@@ -314,7 +528,6 @@ export function PortalLayout({ title, links, children }) {
             <strong className="portal-user-name">{user?.name || 'User'}</strong>
             <div className="portal-user-meta">
               <span className="portal-role-pill">{user?.role || 'Portal'}</span>
-              {user?.email && <span className="portal-user-email">{user.email}</span>}
             </div>
           </div>
           <button
@@ -322,12 +535,12 @@ export function PortalLayout({ title, links, children }) {
             className="portal-user-card-logout"
             onClick={() => {
               setIsMobileMenuOpen(false);
-              setShowLogoutConfirm(true);
+              setShowUserDetails(true);
             }}
-            title="Log out"
-            aria-label="Log out"
+            title="View my details"
+            aria-label="View account details"
           >
-            <LogoutIcon size={16} />
+            <UserDetailsIcon size={16} />
           </button>
         </div>
 
@@ -404,6 +617,10 @@ export function PortalLayout({ title, links, children }) {
         }}
         onCancel={() => setShowLogoutConfirm(false)}
       />
+
+      {showUserDetails && (
+        <UserDetailsModal user={user} onClose={() => setShowUserDetails(false)} />
+      )}
     </div>
   );
 }
