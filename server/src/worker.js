@@ -9,6 +9,7 @@
 import { httpServerHandler } from 'cloudflare:node';
 import { env } from 'cloudflare:workers';
 import app from './app.js';
+import { storageService } from './storage.js';
 
 // Copy string environment variables and secrets to process.env
 try {
@@ -27,6 +28,7 @@ try {
 // Make the R2 bucket and Worker env available to routes
 if (env?.R2_BUCKET) {
   app.set('r2', env.R2_BUCKET);
+  storageService.setWorkersBinding(env.R2_BUCKET);
 }
 app.set('cfEnv', env);
 
