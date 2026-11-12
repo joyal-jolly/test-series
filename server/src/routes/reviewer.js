@@ -255,17 +255,25 @@ router.post('/assignments/:id/evaluate', async (req, res, next) => {
       return res.status(400).json({ error: 'Already evaluated' });
     }
 
+    if (totalMarksOverride == null || totalMarksOverride === '' || isNaN(Number(totalMarksOverride))) {
+      return res.status(400).json({ error: 'Marks input is compulsory before submitting the result' });
+    }
+
+    const totalMarks = Number(totalMarksOverride);
+    if (totalMarks < 0) {
+      return res.status(400).json({ error: 'Marks awarded cannot be negative' });
+    }
+
     const paper = await dbService.getQuestionPaperById(submission.questionPaperId);
+    if (paper?.totalMarks && totalMarks > paper.totalMarks) {
+      return res.status(400).json({ error: `Marks awarded cannot exceed maximum marks (${paper.totalMarks})` });
+    }
 
     const questionMarks = Array.isArray(rawMarks) && rawMarks.length > 0
       ? rawMarks
       : (paper?.questions || []).map((q) => ({ questionId: q.id, marksAwarded: 0, feedback: '' }));
 
     const now = new Date().toISOString();
-    // Use totalMarksOverride if the reviewer entered a direct total; otherwise sum per-question
-    const totalMarks = totalMarksOverride != null
-      ? Number(totalMarksOverride)
-      : questionMarks.reduce((sum, qm) => sum + Number(qm.marksAwarded || 0), 0);
 
     const evaluationId = uuid();
     const evaluation = {
