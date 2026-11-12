@@ -747,7 +747,6 @@ export function ResultPage() {
         )}
         {submission?.answerFileUrl && (
           <div className="annotated-pdf-box">
-            <span className="annotated-pdf-icon">📝</span>
             <div style={{ flex: 1 }}>
               <strong>Reviewed answer sheet</strong>
               <p className="muted" style={{ margin: '0.15rem 0 0.65rem', fontSize: '0.9rem' }}>
