@@ -4259,9 +4259,13 @@ label {
   font-size: 1.6rem;
   font-weight: 700;
   font-family: Fraunces, serif;
-  color: #000000;
+  color: #000000 !important;
   width: 100%;
   outline: none;
+}
+
+.rev-marks-input::placeholder {
+  color: #94a3b8;
 }
 
 [data-theme="dark"] .rev-marks-input {

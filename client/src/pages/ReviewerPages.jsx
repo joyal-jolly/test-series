@@ -466,7 +466,7 @@ export function ReviewSubmissionPage() {
                     required
                     disabled={completed}
                     value={marksAwarded}
-                    placeholder="e.g. 72"
+                    placeholder="—"
                     onChange={(e) => {
                       setMarksAwarded(e.target.value);
                       if (error) setError('');
