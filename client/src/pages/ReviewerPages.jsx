@@ -251,6 +251,27 @@ export function ReviewSubmissionPage() {
 
   async function submit(e) {
     e.preventDefault();
+    if (marksAwarded === '' || marksAwarded == null || isNaN(Number(marksAwarded))) {
+      setError('Marks input is compulsory before submitting the result.');
+      const marksEl = document.querySelector('.rev-marks-input');
+      if (marksEl) marksEl.focus();
+      return;
+    }
+    const totalEntered = Number(marksAwarded);
+    if (totalEntered < 0) {
+      setError('Marks awarded cannot be negative.');
+      const marksEl = document.querySelector('.rev-marks-input');
+      if (marksEl) marksEl.focus();
+      return;
+    }
+    const maxMarks = data?.assignment?.totalMarks;
+    if (maxMarks && totalEntered > maxMarks) {
+      setError(`Marks awarded cannot exceed the maximum marks of ${maxMarks}.`);
+      const marksEl = document.querySelector('.rev-marks-input');
+      if (marksEl) marksEl.focus();
+      return;
+    }
+
     setBusy(true);
     setError('');
     let annotatedPdfUrl = null;
@@ -280,7 +301,6 @@ export function ReviewSubmissionPage() {
     try {
       // Build questionMarks: distribute entered total marks evenly across questions,
       // or use 0 if no marks entered
-      const totalEntered = marksAwarded !== '' ? Number(marksAwarded) : 0;
       const questions = data.assignment.questions || [];
       let questionMarks;
       if (questions.length > 0) {
@@ -434,17 +454,23 @@ export function ReviewSubmissionPage() {
 
             <form className="form rev-eval-form" onSubmit={submit}>
               <label className="rev-marks-label">
-                <span className="rev-marks-label-text">Marks Awarded</span>
+                <span className="rev-marks-label-text">
+                  Marks Awarded <span style={{ color: '#ef4444' }} title="Compulsory">*</span>
+                </span>
                 <div className="rev-marks-input-wrap">
                   <input
                     type="number"
                     min="0"
                     max={data?.assignment?.totalMarks || 9999}
                     step="0.5"
+                    required
                     disabled={completed}
                     value={marksAwarded}
                     placeholder="e.g. 72"
-                    onChange={(e) => setMarksAwarded(e.target.value)}
+                    onChange={(e) => {
+                      setMarksAwarded(e.target.value);
+                      if (error) setError('');
+                    }}
                     className="rev-marks-input"
                     style={{ color: '#000000' }}
                   />
