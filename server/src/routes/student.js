@@ -542,6 +542,7 @@ router.get('/:id/result', requireAuth, requireRole('student'), async (req, res, 
         ? {
           ...evaluation,
           reviewerName: reviewer?.name,
+          reviewerPhone: reviewer?.profile?.phone || reviewer?.phone || '',
           questionEvaluations: questionEvals,
         }
         : null,

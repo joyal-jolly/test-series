@@ -2,7 +2,7 @@ import { Component, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PortalLayout } from '../components/Layouts';
 import PDFAnnotator from '../components/PDFAnnotator';
-import { api } from '../lib/api';
+import { api, getAuthFileUrl } from '../lib/api';
 
 // ─── Error Boundary ───────────────────────────────────────────────────────────
 export class ReviewErrorBoundary extends Component {
@@ -221,6 +221,13 @@ export function ReviewSubmissionPage() {
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (data?.assignment?.draftAnnotations && !data?.evaluation && answerAnnotatorRef.current?.loadAnnotations && !annotationsLoadedRef.current) {
+      answerAnnotatorRef.current.loadAnnotations(data.assignment.draftAnnotations);
+      annotationsLoadedRef.current = true;
+    }
+  }, [data]);
+
   async function saveDraft() {
     setDraftBusy(true);
     setDraftMsg(null);
@@ -332,19 +339,8 @@ export function ReviewSubmissionPage() {
   const { assignment } = data;
   const completed = assignment.status === 'evaluated';
 
-  // Build absolute URLs (needed for PDF.js loading)
-  function buildUrl(path) {
-    if (!path) return null;
-    const { protocol, hostname, port } = window.location;
-    const base = `${protocol}//${hostname}${port ? ':' + port : ''}${path}`;
-    const token = localStorage.getItem('ca_token');
-    if (!token || base.includes('token=')) return base;
-    const separator = base.includes('?') ? '&' : '?';
-    return `${base}${separator}token=${encodeURIComponent(token)}`;
-  }
-
-  const answerUrl = buildUrl(assignment.answerFileUrl);
-  const paperPdfUrl = buildUrl(assignment.pdfUrl);
+  const answerUrl = getAuthFileUrl(assignment.answerFileUrl);
+  const paperPdfUrl = getAuthFileUrl(assignment.pdfUrl);
 
   return (
     <div className="rev-shell">

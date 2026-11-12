@@ -271,12 +271,36 @@ const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
     annotCanvasRefs.current = {};
 
     let isCancelled = false;
+    let activeTask = null;
     const token = typeof window !== 'undefined' ? localStorage.getItem('ca_token') : null;
-    const httpHeaders = token ? { Authorization: `Bearer ${token}` } : {};
-    const task = pdfjsLib.getDocument({ url: pdfUrl, httpHeaders });
-    task.promise
+    const isDirectExternal = /^https?:\/\//i.test(pdfUrl) &&
+      typeof window !== 'undefined' &&
+      !pdfUrl.startsWith(window.location.origin) &&
+      (!import.meta.env.VITE_API_URL || !pdfUrl.startsWith(import.meta.env.VITE_API_URL));
+    const httpHeaders = (token && !isDirectExternal) ? { Authorization: `Bearer ${token}` } : {};
+
+    const loadDoc = (disableRange = false) => {
+      const task = pdfjsLib.getDocument({
+        url: pdfUrl,
+        httpHeaders,
+        withCredentials: false,
+        disableRange,
+      });
+      activeTask = task;
+      return task.promise;
+    };
+
+    loadDoc(false)
+      .catch((rangeErr) => {
+        if (isCancelled) return null;
+        if (rangeErr?.name === 'AbortException' || rangeErr?.message?.toLowerCase().includes('abort')) {
+          throw rangeErr;
+        }
+        console.warn('[PDFAnnotator] Range request failed, retrying with disableRange: true...', rangeErr);
+        return loadDoc(true);
+      })
       .then((doc) => {
-        if (isCancelled) return;
+        if (!doc || isCancelled) return;
         pdfDocRef.current = doc;
         setNumPages(doc.numPages);
         setPdfError('');
@@ -293,7 +317,7 @@ const PDFAnnotator = forwardRef(function PDFAnnotator({ pdfUrl }, ref) {
       });
     return () => {
       isCancelled = true;
-      try { task.destroy(); } catch { /* ignore */ }
+      try { activeTask?.destroy(); } catch { /* ignore */ }
     };
   }, [pdfUrl]);
 

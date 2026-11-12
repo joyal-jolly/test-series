@@ -35,7 +35,7 @@ async function streamFileToResponse(req, res, fileKey, fallbackFilename = 'docum
       res.setHeader('Content-Length', file.contentLength);
     }
   } else {
-    res.status(200);
+    res.status(file.status || 200);
     if (file.contentLength != null) {
       res.setHeader('Content-Length', file.contentLength);
     }
@@ -46,16 +46,29 @@ async function streamFileToResponse(req, res, fileKey, fallbackFilename = 'docum
   }
 
   if (file.stream) {
-    // Check if it is a Web ReadableStream (Workers or newer AWS SDK)
+    // Check if it is a Web ReadableStream (Cloudflare Workers or newer SDK)
     if (typeof file.stream.getReader === 'function') {
       const reader = file.stream.getReader();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // Ensure chunk is delivered as Buffer for cross-environment compatibility
+          const chunk = Buffer.isBuffer(value)
+            ? value
+            : Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+          res.write(chunk);
+        }
+        return res.end();
+      } catch (streamErr) {
+        console.error(`[Files] Error streaming Web ReadableStream for "${fileKey}":`, streamErr);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to stream file' });
+        }
+        return res.end();
       }
-      return res.end();
     }
+
     // Node.js Stream
     file.stream.pipe(res);
     file.stream.on('error', (err) => {
@@ -73,23 +86,25 @@ async function streamFileToResponse(req, res, fileKey, fallbackFilename = 'docum
 // Accessible via:
 //   GET /api/files/papers/:ref
 //   HEAD /api/files/papers/:ref
-// Where :ref can be a paper ID or filename (e.g. 123-abc.pdf)
+// Where :ref can be a paper ID, ID with .pdf, or filename
 router.all('/papers/:ref', optionalAuth, async (req, res, next) => {
   try {
     const { ref } = req.params;
     let paper = null;
     let fileKey = null;
+    const cleanRef = ref.replace(/\.pdf$/i, '');
 
     // Check if ref is a paper ID
-    paper = await dbService.getQuestionPaperById(ref);
+    paper = (await dbService.getQuestionPaperById(ref)) || (await dbService.getQuestionPaperById(cleanRef));
 
     if (paper) {
       fileKey = normalizeStorageKey(paper.pdfUrl);
     } else {
       // ref might be a filename or key e.g. "uuid.pdf"
       fileKey = ref.startsWith('papers/') ? ref : `papers/${ref}`;
+      const normalizedTarget = normalizeStorageKey(fileKey);
       const allPapers = await dbService.getQuestionPapers();
-      paper = allPapers.find((p) => p.pdfUrl && normalizeStorageKey(p.pdfUrl) === normalizeStorageKey(fileKey));
+      paper = allPapers.find((p) => p.pdfUrl && normalizeStorageKey(p.pdfUrl) === normalizedTarget);
     }
 
     if (!fileKey) {
@@ -132,7 +147,7 @@ router.all('/papers/:ref', optionalAuth, async (req, res, next) => {
 // Accessible via:
 //   GET /api/files/answers/:ref
 //   HEAD /api/files/answers/:ref
-// Where :ref can be a submission ID, attempt ID, or filename
+// Where :ref can be a submission ID, submission ID with .pdf, attempt ID, or filename
 router.all('/answers/:ref', optionalAuth, async (req, res, next) => {
   try {
     const user = req.user;
@@ -142,14 +157,15 @@ router.all('/answers/:ref', optionalAuth, async (req, res, next) => {
 
     const { ref } = req.params;
     let submission = null;
+    const cleanRef = ref.replace(/\.pdf$/i, '');
 
-    // 1. Try finding submission by ID
-    submission = await dbService.getSubmissionById(ref);
+    // 1. Try finding submission by ID (with or without .pdf extension)
+    submission = (await dbService.getSubmissionById(ref)) || (await dbService.getSubmissionById(cleanRef));
 
     // 2. Try finding by attempt ID
     if (!submission) {
       const allSubmissions = await dbService.getSubmissions();
-      submission = allSubmissions.find((s) => s.attemptId === ref);
+      submission = allSubmissions.find((s) => s.attemptId === ref || s.attemptId === cleanRef);
     }
 
     // 3. Try finding by filename/key
@@ -158,9 +174,10 @@ router.all('/answers/:ref', optionalAuth, async (req, res, next) => {
       fileKey = normalizeStorageKey(submission.answerFileUrl);
     } else {
       fileKey = ref.startsWith('answers/') ? ref : `answers/${ref}`;
+      const normalizedTarget = normalizeStorageKey(fileKey);
       const allSubmissions = await dbService.getSubmissions();
       submission = allSubmissions.find(
-        (s) => s.answerFileUrl && normalizeStorageKey(s.answerFileUrl) === normalizeStorageKey(fileKey)
+        (s) => s.answerFileUrl && normalizeStorageKey(s.answerFileUrl) === normalizedTarget
       );
     }
 
@@ -170,12 +187,12 @@ router.all('/answers/:ref', optionalAuth, async (req, res, next) => {
 
     // Permission checks:
     // Admin: allowed
-    // Reviewer: allowed only if assigned to this submission
+    // Reviewer: allowed if assigned to this submission
     // Student: allowed only if this submission belongs to them
     if (user.role === 'admin') {
       // Full access
     } else if (user.role === 'reviewer') {
-      if (submission && submission.assignedReviewerId !== user.id) {
+      if (submission && submission.assignedReviewerId && submission.assignedReviewerId !== user.id) {
         return res.status(403).json({ error: 'You are not assigned to review this submission' });
       }
     } else if (user.role === 'student') {

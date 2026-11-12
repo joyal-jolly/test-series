@@ -17,6 +17,7 @@ import adminRoutes from './routes/admin.js';
 import reviewerRoutes from './routes/reviewer.js';
 import contactRoutes from './routes/contact.js';
 import filesRoutes from './routes/files.js';
+import { getStorageBucket } from './storage.js';
 
 const PORT = process.env.PORT || 4000;
 
@@ -36,7 +37,17 @@ async function initializeDatabase() {
 await initializeDatabase();
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+
+app.set('r2', getStorageBucket());
+
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Disposition'],
+  })
+);
+
 app.use(express.json({ limit: '2mb' }));
 app.use('/api/files', filesRoutes);
 // Backward compatibility for existing file references (/uploads/papers/*, /uploads/answers/*)

@@ -7,9 +7,29 @@ import adminRoutes from './routes/admin.js';
 import reviewerRoutes from './routes/reviewer.js';
 import contactRoutes from './routes/contact.js';
 import filesRoutes from './routes/files.js';
+import { getStorageBucket } from './storage.js';
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+    exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Disposition'],
+  })
+);
+
+// Ensure R2 bucket binding is always attached to app
+app.use((req, _res, next) => {
+  if (!req.app.get('r2')) {
+    const bucket = req.env?.R2_BUCKET || globalThis.env?.R2_BUCKET || getStorageBucket();
+    if (bucket) {
+      req.app.set('r2', bucket);
+    }
+  }
+  next();
+});
+
 app.use(express.json({ limit: '2mb' }));
 app.use('/api/files', filesRoutes);
 app.use('/uploads', filesRoutes);

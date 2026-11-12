@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PortalLayout } from '../components/Layouts';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { api, getAuthFileUrl } from '../lib/api';
 
 export function AdminPortalLayout({ children, unassignedCount }) {
@@ -166,6 +167,10 @@ export function AdminPapers() {
   const [editingGroup, setEditingGroup] = useState(null);
   const [editGroupError, setEditGroupError] = useState('');
 
+  // Delete confirm modal state
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
   // Schedule Date/Time modal (shared date & time for the whole schedule)
   const [scheduleDateModal, setScheduleDateModal] = useState(null);
   const [scheduleDateForm, setScheduleDateForm] = useState({ availableDate: '', availableTime: '' });
@@ -230,14 +235,13 @@ export function AdminPapers() {
   }
 
   // ── Delete Group ──
-  async function deleteGroup(id) {
-    if (!window.confirm('Delete this group? Question papers inside will be unlinked.')) return;
-    try {
-      await api(`/api/admin/groups/${id}`, { method: 'DELETE' });
-      reload();
-    } catch (err) {
-      alert(err.message);
-    }
+  function deleteGroup(id, name) {
+    setDeleteConfirm({
+      type: 'group',
+      id,
+      title: 'Delete Question Paper Group',
+      message: `Are you sure you want to delete "${name || 'this group'}"? Question papers inside will be unlinked.`,
+    });
   }
 
   // ── Save Edit Group ──
@@ -391,13 +395,30 @@ export function AdminPapers() {
   }
 
   // ── Delete paper ──
-  async function deletePaper(paperId) {
-    if (!window.confirm('Delete this question paper? This will also remove any attempts.')) return;
+  function deletePaper(paperId, title) {
+    setDeleteConfirm({
+      type: 'paper',
+      id: paperId,
+      title: 'Delete Question Paper',
+      message: `Are you sure you want to delete "${title || 'this question paper'}"? This will permanently remove the paper and any student attempts.`,
+    });
+  }
+
+  async function executeDelete() {
+    if (!deleteConfirm) return;
+    setDeleteBusy(true);
     try {
-      await api(`/api/admin/papers/${paperId}`, { method: 'DELETE' });
+      if (deleteConfirm.type === 'group') {
+        await api(`/api/admin/groups/${deleteConfirm.id}`, { method: 'DELETE' });
+      } else if (deleteConfirm.type === 'paper') {
+        await api(`/api/admin/papers/${deleteConfirm.id}`, { method: 'DELETE' });
+      }
+      setDeleteConfirm(null);
       reload();
     } catch (err) {
       alert(err.message);
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -553,7 +574,7 @@ export function AdminPapers() {
                   <button
                     type="button"
                     className="btn subtle danger"
-                    onClick={(e) => { e.stopPropagation(); deleteGroup(g.id); }}
+                    onClick={(e) => { e.stopPropagation(); deleteGroup(g.id, g.name); }}
                   >
                     Delete
                   </button>
@@ -718,7 +739,7 @@ export function AdminPapers() {
                                       <button
                                         type="button"
                                         className="btn subtle danger"
-                                        onClick={() => deletePaper(p.id)}
+                                        onClick={() => deletePaper(p.id, p.title)}
                                       >
                                         Remove
                                       </button>
@@ -1013,6 +1034,19 @@ export function AdminPapers() {
           </div>
         </div>
       )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      <ConfirmModal
+        isOpen={Boolean(deleteConfirm)}
+        title={deleteConfirm?.title || 'Confirm Deletion'}
+        message={deleteConfirm?.message || 'Are you sure you want to delete this item? This action cannot be undone.'}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        busy={deleteBusy}
+        onConfirm={executeDelete}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </AdminPortalLayout>
   );
 }
@@ -1181,6 +1215,10 @@ export function AdminUsers() {
   const [editError, setEditError] = useState('');
   const [editBusy, setEditBusy] = useState(false);
 
+  // Delete User confirm modal
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [deleteUserBusy, setDeleteUserBusy] = useState(false);
+
   // Global status/error
   const [toast, setToast] = useState(null); // { ok: bool, text: string }
 
@@ -1275,14 +1313,22 @@ export function AdminUsers() {
   }
 
   // ── Delete User ──
-  async function deleteUser(u) {
-    if (!window.confirm(`Delete ${u.name}? This cannot be undone.`)) return;
+  function deleteUser(u) {
+    setUserToDelete(u);
+  }
+
+  async function confirmDeleteUser() {
+    if (!userToDelete) return;
+    setDeleteUserBusy(true);
     try {
-      await api(`/api/admin/users/${u.id}`, { method: 'DELETE' });
+      await api(`/api/admin/users/${userToDelete.id}`, { method: 'DELETE' });
+      showToast(true, `"${userToDelete.name}" deleted.`);
+      setUserToDelete(null);
       reload();
-      showToast(true, `"${u.name}" deleted.`);
     } catch (err) {
       showToast(false, err.message);
+    } finally {
+      setDeleteUserBusy(false);
     }
   }
 
@@ -1570,6 +1616,19 @@ export function AdminUsers() {
           </div>
         </div>
       )}
+
+      {/* ── Delete User Confirmation Modal ── */}
+      <ConfirmModal
+        isOpen={Boolean(userToDelete)}
+        title="Delete User"
+        message={`Are you sure you want to delete "${userToDelete?.name || 'this user'}" (${userToDelete?.email || ''})? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        confirmVariant="danger"
+        busy={deleteUserBusy}
+        onConfirm={confirmDeleteUser}
+        onCancel={() => setUserToDelete(null)}
+      />
     </AdminPortalLayout>
   );
 }

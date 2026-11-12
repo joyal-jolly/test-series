@@ -204,12 +204,27 @@ export async function api(path, options = {}) {
   return promise.then(clone);
 }
 
-export function getAuthFileUrl(path) {
-  if (!path) return '';
+export function getAuthFileUrl(rawPath) {
+  if (!rawPath) return '';
+  let path = String(rawPath).trim();
+  // Normalize bare storage keys e.g. "answers/xyz.pdf" -> "/api/files/answers/xyz.pdf"
+  if (path.startsWith('answers/') || path.startsWith('papers/')) {
+    path = `/api/files/${path}`;
+  } else if (path.startsWith('uploads/')) {
+    path = `/${path}`;
+  }
   const token = getToken();
-  const url = (API_BASE && path.startsWith('/')) ? `${API_BASE}${path}` : path;
+  const isExternal = /^https?:\/\//i.test(path);
+  let url = path;
+  if (!isExternal && API_BASE && path.startsWith('/')) {
+    url = `${API_BASE}${path}`;
+  }
   if (!token) return url;
   if (url.includes('token=')) return url;
+  // If this is a direct external third-party URL (e.g. public Cloudflare R2 storage), do not attach internal JWT token
+  if (isExternal && typeof window !== 'undefined' && !url.startsWith(window.location.origin) && (!API_BASE || !url.startsWith(API_BASE))) {
+    return url;
+  }
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}token=${encodeURIComponent(token)}`;
 }

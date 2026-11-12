@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { PortalLayout } from '../components/Layouts';
+import { useAuth } from '../context/AuthContext';
 import { api, getAuthFileUrl } from '../lib/api';
+
+function WhatsAppIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L0 24l6.335-1.662c1.746.953 3.71 1.456 5.711 1.457h.005c6.554 0 11.89-5.335 11.893-11.893a11.82 11.82 0 00-3.48-8.413Z"/>
+    </svg>
+  );
+}
 
 // ─── Leave Exam Confirmation Modal ────────────────────────────────────────────
 function LeaveExamModal({ onConfirm, onCancel, busy }) {
@@ -29,7 +38,7 @@ function LeaveExamModal({ onConfirm, onCancel, busy }) {
 const studentLinks = [
   { to: '/student', label: 'Dashboard', end: true },
   { to: '/papers', label: 'Browse papers' },
-  { to: '/student/results', label: 'Results' },
+  { to: '/student/results', label: 'Group Results' },
 ];
 
 function statusLabel(status) {
@@ -628,12 +637,14 @@ export function AttemptPage() {
 // ─── Result Page ───────────────────────────────────────────────────────────────
 export function ResultPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     markResultViewed(id);
-    api(`/api/student/${id}/result`)
+    api(`/api/student/${id}/result`, { cache: false })
       .then(setData)
       .catch((e) => setError(e.message));
   }, [id]);
@@ -655,6 +666,45 @@ export function ResultPage() {
   }
 
   const { paper, evaluation, submission } = data;
+
+  const reviewerPhone = evaluation?.reviewerPhone;
+  const cleanPhone = reviewerPhone ? String(reviewerPhone).replace(/[^0-9]/g, '') : '';
+  const fullPhone = cleanPhone ? (cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone) : '';
+
+  const paperTitle = paper?.scheduleNumber != null
+    ? `Schedule ${paper.scheduleNumber} — ${paper.title}`
+    : paper?.title || 'my paper';
+  const marksText = evaluation?.totalMarks != null ? ` (Score: ${evaluation.totalMarks}${paper?.totalMarks ? `/${paper.totalMarks}` : ''})` : '';
+  const studentIntro = user?.name ? ` I am ${user.name}.` : '';
+  const reviewerGreeting = evaluation?.reviewerName ? `Hello ${evaluation.reviewerName}` : 'Hello Sir/Madam';
+  const waMessage = `${reviewerGreeting},${studentIntro} I have a query regarding my evaluated answer sheet for ${paperTitle}${marksText}. Could you please guide me?`;
+
+  const whatsappUrl = fullPhone ? `https://api.whatsapp.com/send?phone=${fullPhone}&text=${encodeURIComponent(waMessage)}` : '';
+
+  async function handleDownloadResult() {
+    if (!submission?.answerFileUrl) return;
+    setDownloading(true);
+    try {
+      const rawUrl = `${submission.answerFileUrl}?v=${encodeURIComponent(evaluation?.evaluatedAt || '')}`;
+      const authUrl = getAuthFileUrl(rawUrl);
+      const res = await fetch(authUrl);
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      const safeTitle = (paper?.title || 'evaluated-result').replace(/[^a-zA-Z0-9_-]/g, '_');
+      a.download = `${safeTitle}-Evaluated.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(getAuthFileUrl(submission.answerFileUrl), '_blank');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   return (
     <PortalLayout title="Student portal" links={studentLinks}>
@@ -697,20 +747,62 @@ export function ResultPage() {
         )}
         {submission?.answerFileUrl && (
           <div className="annotated-pdf-box">
-            <span className="annotated-pdf-icon"></span>
-            <div>
+            <span className="annotated-pdf-icon">📝</span>
+            <div style={{ flex: 1 }}>
               <strong>Reviewed answer sheet</strong>
-              <p className="muted" style={{ margin: '0.15rem 0 0.5rem' }}>
-                Click below to view result
+              <p className="muted" style={{ margin: '0.15rem 0 0.65rem', fontSize: '0.9rem' }}>
+                View your evaluated paper with annotations, marks and reviewer feedback.
               </p>
-              <a
-                href={getAuthFileUrl(`${submission.answerFileUrl}?v=${encodeURIComponent(evaluation.evaluatedAt || '')}`)}
-                target="_blank"
-                rel="noreferrer"
-                className="btn primary annotated-pdf-btn"
-              >
-                Open result
-              </a>
+              <div className="result-actions-row">
+                <a
+                  href={getAuthFileUrl(`${submission.answerFileUrl}?v=${encodeURIComponent(evaluation.evaluatedAt || '')}`)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn primary annotated-pdf-btn"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Open result
+                </a>
+                <button
+                  type="button"
+                  onClick={handleDownloadResult}
+                  disabled={downloading}
+                  className="btn ghost annotated-pdf-btn"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  {downloading ? 'Downloading…' : 'Download PDF'}
+                </button>
+                {whatsappUrl ? (
+                  <a
+                    href={whatsappUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="whatsapp-connect-btn"
+                    title={`Chat on WhatsApp with ${evaluation?.reviewerName || 'reviewer'} (+${fullPhone})`}
+                  >
+                    <WhatsAppIcon />
+                    Connect with reviewer on WhatsApp
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => alert(`Reviewer ${evaluation?.reviewerName || ''} has not provided a WhatsApp contact number yet. Please contact campus admin.`)}
+                    className="whatsapp-connect-btn"
+                    style={{ opacity: 0.8 }}
+                    title="Reviewer WhatsApp contact number not added yet"
+                  >
+                    <WhatsAppIcon />
+                    Connect with reviewer on WhatsApp
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
