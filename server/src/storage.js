@@ -9,8 +9,18 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// ─── Environment detection ────────────────────────────────────────────────────
+// Cloudflare Workers: import.meta.url is undefined or not a file:// URL.
+// Guard fileURLToPath so the Worker bundle doesn't throw at startup.
+let __dirname = '/tmp'; // safe fallback — local FS is never used inside CF Workers
+try {
+  if (typeof import.meta.url === 'string' && import.meta.url.startsWith('file://')) {
+    __dirname = path.dirname(fileURLToPath(import.meta.url));
+  }
+} catch {
+  // CF Workers environment — local filesystem not available, R2 binding used instead
+}
+
 const LOCAL_UPLOADS_DIR = path.resolve(__dirname, '../uploads');
 
 // ─── Key helpers ─────────────────────────────────────────────────────────────
@@ -164,34 +174,6 @@ class StorageService {
       });
       await this.r2Client.send(command);
       return { key: cleanKey, size: buffer.length, contentType };
-    }
-
-    // 2. Try R2 Public URL if configured (e.g. https://pub-xxxx.r2.dev or custom domain)
-    const r2PublicBase = process.env.R2_PUBLIC_URL?.trim()?.replace(/\/+$/, '');
-    if (r2PublicBase) {
-      try {
-        const fetchUrl = `${r2PublicBase}/${cleanKey}`;
-        const headers = {};
-        if (options.range) headers['Range'] = options.range;
-        const res = await fetch(fetchUrl, { headers });
-        if (res.ok || res.status === 206) {
-          const contentType = res.headers.get('content-type') || 'application/pdf';
-          const contentRange = res.headers.get('content-range') || undefined;
-          const contentLengthStr = res.headers.get('content-length');
-          const contentLength = contentLengthStr ? parseInt(contentLengthStr, 10) : undefined;
-          const lastModifiedStr = res.headers.get('last-modified');
-          return {
-            stream: res.body,
-            contentType,
-            contentLength,
-            contentRange,
-            status: res.status,
-            lastModified: lastModifiedStr ? new Date(lastModifiedStr) : undefined,
-          };
-        }
-      } catch (err) {
-        console.warn(`[Storage] R2 public fetch failed for "${cleanKey}":`, err.message);
-      }
     }
 
     // 3. Local filesystem fallback
