@@ -558,7 +558,9 @@ export default function GroupDetailPage() {
             {/* Price + exemption / enrollment badge */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.65rem', minWidth: 160 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'var(--accent-soft)', border: '1.5px solid var(--line)', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.74rem', fontWeight: 700, textDecoration: 'line-through', userSelect: 'none' }}>100 Rs</div>
+                <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'var(--accent-soft)', border: '1.5px solid var(--line)', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.74rem', fontWeight: 700, textDecoration: 'line-through', userSelect: 'none' }}>
+                  {Number(group.price) > 0 ? `₹${group.price}` : '100 Rs'}
+                </div>
                 <div style={{ width: 60, height: 34, borderRadius: 999, background: '#dcfce7', border: '1.5px solid #86efac', color: '#15803d', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', userSelect: 'none' }}>Free</div>
               </div>
               {isStudent && enrolled && (
@@ -639,7 +641,9 @@ export default function GroupDetailPage() {
                   <div className="group-schedule-table-wrap">
                     <table className="data-table group-schedule-table">
                       <tbody>
-                        {papers.map((p) => (
+                        {papers.map((p) => {
+                          const paperIsAvailable = p.isAvailable ?? (p.availableAt ? new Date(p.availableAt).getTime() <= now : isAvailable);
+                          return (
                           <tr key={p.id}>
                             <td>
                               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -666,6 +670,11 @@ export default function GroupDetailPage() {
                                 {p.title}
                               </Link>
                               {p.chapter && <div className="muted" style={{ fontSize: '0.78rem' }}>{p.chapter}</div>}
+                              {!paperIsAvailable && p.availableAt && (
+                                <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 600, marginTop: '0.15rem' }}>
+                                  🔒 Opens {formatScheduleDateTime(p.availableAt)}
+                                </div>
+                              )}
                             </td>
                             <td>
                               <span className="pill" style={{ background: 'var(--accent-soft)', color: 'var(--ink)', fontWeight: 600, fontSize: '0.75rem', border: '1px solid var(--line)' }}>{p.paperType}</span>
@@ -679,7 +688,7 @@ export default function GroupDetailPage() {
                               {isStudent ? (
                                 <PaperButton
                                   paperId={p.id}
-                                  isAvailable={isAvailable}
+                                  isAvailable={paperIsAvailable}
                                   enrolled={enrolled}
                                   paperAttempts={paperAttempts}
                                   onAttemptClick={handleAttemptClick}
@@ -689,7 +698,8 @@ export default function GroupDetailPage() {
                               ) : null}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

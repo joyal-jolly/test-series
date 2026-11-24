@@ -1,6 +1,4 @@
-import { useState } from 'react';
 import { PublicLayout } from '../components/Layouts';
-import { api } from '../lib/api';
 
 function LocationIcon({ size = 20 }) {
   return (
@@ -39,6 +37,14 @@ function PhoneIcon({ size = 20 }) {
   );
 }
 
+function WhatsAppIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm.01 1.67c2.2 0 4.26.86 5.82 2.42a8.23 8.23 0 0 1 2.41 5.82c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.2 8.2 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24zm4.52 11.64c-.25-.13-1.47-.72-1.7-.81-.23-.08-.4-.13-.56.13-.17.25-.65.81-.8 1-.14.16-.29.18-.54.06-.25-.13-1.07-.39-2.03-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.38-.44.12-.14.17-.24.25-.4.08-.17.04-.31-.02-.44-.06-.12-.56-1.35-.77-1.85-.2-.49-.41-.42-.56-.43h-.48c-.16 0-.43.06-.65.31-.23.25-.87.85-.87 2.07s.89 2.4 1.02 2.57c.12.17 1.75 2.67 4.24 3.75.59.26 1.05.41 1.41.53.59.19 1.14.16 1.57.1.48-.07 1.47-.6 1.68-1.18.2-.58.2-1.08.14-1.18-.06-.1-.23-.17-.48-.29z" />
+    </svg>
+  );
+}
+
 function MailIcon({ size = 20 }) {
   return (
     <svg
@@ -58,143 +64,74 @@ function MailIcon({ size = 20 }) {
   );
 }
 
-function GlobeIcon({ size = 20 }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-      <path d="M2 12h20" />
-    </svg>
-  );
-}
-
 export default function ContactPage() {
-  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
-  const [status, setStatus] = useState(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function submit(e) {
-    e.preventDefault();
-    setError('');
-    setStatus(null);
-    setLoading(true);
-    try {
-      const res = await api('/api/contact', { method: 'POST', body: form });
-      setStatus(res.message);
-      setForm({ name: '', email: '', subject: '', message: '' });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <PublicLayout>
       <section className="page-band">
-        <div className="split">
-          <div>
-            <h1>Contact Mentaura CA</h1>
-            <p className="hero-tagline">Committed to Your Success</p>
-            <p>
-              Have questions regarding admissions, residential batches, or online test series evaluations?
-              Reach out directly to our campus administrative office in Vazhakulam, Ernakulam.
-            </p>
+        <div style={{ maxWidth: '720px', margin: '0 auto 2.5rem', textAlign: 'center' }}>
+          <h1 style={{ marginBottom: '0.5rem' }}>Ways to Connect with Us</h1>
+          <p className="hero-tagline" style={{ marginBottom: '0.75rem' }}>We&apos;re here to help you succeed</p>
+          <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6 }}>
+            Have questions regarding admissions, residential batches, syllabus, or test series evaluations?
+            Connect directly with our team through any of the channels below.
+          </p>
+        </div>
 
-            <div className="contact-info-cards">
-              <div className="contact-card">
-                <span className="contact-icon" title="Location">
-                  <LocationIcon />
-                </span>
-                <div>
-                  <strong>Campus Location</strong>
-                  <p>Kadalikadu P.O., Manjalloor, Ernakulam, Kerala</p>
-                </div>
-              </div>
-
-              <div className="contact-card">
-                <span className="contact-icon" title="Phone">
-                  <PhoneIcon />
-                </span>
-                <div>
+        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <div className="contact-info-cards" style={{ marginTop: 0 }}>
+            {/* Phone / WhatsApp - Preferred Mode */}
+            <div className="contact-card preferred">
+              <span className="contact-icon preferred-icon" title="Phone / WhatsApp">
+                <PhoneIcon />
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
                   <strong>Phone / WhatsApp</strong>
-                  <p>
-                    <a href="tel:+916282955052">+91 6282955052</a>
-                  </p>
+                  <span className="contact-preferred-tag">
+                    ★ Preferred Mode
+                  </span>
                 </div>
-              </div>
-
-              <div className="contact-card">
-                <span className="contact-icon" title="Email">
-                  <MailIcon />
-                </span>
-                <div>
-                  <strong>Email</strong>
-                  <p>
-                    <a href="mailto:mentauraca.testseries@gmail.com">mentauraca.testseries@gmail.com</a>
-                  </p>
-                </div>
-              </div>
-
-              <div className="contact-card">
-                <span className="contact-icon" title="Website">
-                  <GlobeIcon />
-                </span>
-                <div>
-                  <strong>Official Website</strong>
-                  <p>
-                    <a href="https://mentauraca.info/" target="_blank" rel="noreferrer">
-                      mentauraca.info ↗
-                    </a>
-                  </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.9rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                  <a href="tel:+916282955052" style={{ fontSize: '1.05rem', fontWeight: 700 }}>
+                    +91 6282955052
+                  </a>
+                  <a
+                    href="https://wa.me/916282955052"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="contact-whatsapp-btn"
+                  >
+                    <WhatsAppIcon size={16} />
+                    <span>Chat on WhatsApp</span>
+                  </a>
                 </div>
               </div>
             </div>
+
+            {/* Email */}
+            <div className="contact-card">
+              <span className="contact-icon" title="Email">
+                <MailIcon />
+              </span>
+              <div>
+                <strong>Email</strong>
+                <p>
+                  <a href="mailto:mentauraca@gmail.com">mentauraca@gmail.com</a>
+                </p>
+              </div>
+            </div>
+
+            {/* Campus Location */}
+            <div className="contact-card">
+              <span className="contact-icon" title="Location">
+                <LocationIcon />
+              </span>
+              <div>
+                <strong>Campus Location</strong>
+                <p>Kadalikadu P.O., Manjalloor, Ernakulam, Kerala</p>
+              </div>
+            </div>
           </div>
-          <form className="panel form" onSubmit={submit}>
-            <label>
-              Name
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                required
-              />
-            </label>
-            <label>
-              Subject
-              <input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
-            </label>
-            <label>
-              Message
-              <textarea
-                rows={5}
-                value={form.message}
-                onChange={(e) => setForm({ ...form, message: e.target.value })}
-                required
-              />
-            </label>
-            {error && <p className="error">{error}</p>}
-            {status && <p className="success">{status}</p>}
-            <button className="btn primary" type="submit" disabled={loading}>
-              {loading ? 'Sending message…' : 'Send message'}
-            </button>
-          </form>
         </div>
       </section>
     </PublicLayout>

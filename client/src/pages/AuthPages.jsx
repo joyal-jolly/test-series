@@ -214,6 +214,9 @@ export function RegisterPage() {
       setResendCountdown(60);
       setStep('otp');
       setInfoMsg(res.message || `A 4-digit verification code was sent to ${form.email}.`);
+      if (res.devOtp) {
+        console.log(`%c[DEV OTP] Verification code for ${form.email}: ${res.devOtp}`, 'color: #0284c7; font-weight: bold; font-size: 14px;');
+      }
     } catch (err) {
       setError(err.message || 'Failed to send verification code. Please try again.');
     } finally {
@@ -238,6 +241,9 @@ export function RegisterPage() {
       setOtpDigits(['', '', '', '']);
       setResendCountdown(60);
       setInfoMsg('A fresh 4-digit code has been sent to your email.');
+      if (res.devOtp) {
+        console.log(`%c[DEV OTP] Verification code for ${form.email}: ${res.devOtp}`, 'color: #0284c7; font-weight: bold; font-size: 14px;');
+      }
       digitInputsRef.current[0]?.focus();
     } catch (err) {
       setError(err.message || 'Failed to resend code. Please try again.');
@@ -337,7 +343,6 @@ export function RegisterPage() {
               <input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="e.g. Joyal Jolly"
                 required
               />
             </label>
@@ -349,7 +354,6 @@ export function RegisterPage() {
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 autoComplete="off"
-                placeholder="e.g. student@gmail.com"
                 required
               />
             </label>
@@ -391,7 +395,6 @@ export function RegisterPage() {
                 type="tel"
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                placeholder="e.g. +91 9876543210"
                 required
               />
             </label>

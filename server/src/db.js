@@ -284,6 +284,7 @@ export const dbService = {
     return (data || []).map((g) => ({
       ...g,
       caLevel: g.caLevel || g.calevel || g.ca_level || 'Intermediate',
+      price: Number(g.price) || 0,
     }));
   },
 
@@ -294,6 +295,7 @@ export const dbService = {
     return {
       ...data,
       caLevel: data.caLevel || data.calevel || data.ca_level || 'Intermediate',
+      price: Number(data.price) || 0,
     };
   },
 
@@ -310,6 +312,11 @@ export const dbService = {
 
     if (res.error && res.error.message.includes('numSubjectsPerSchedule')) {
       const { numSubjectsPerSchedule, ...rest } = payload;
+      res = await supabase.from('question_paper_groups').insert(rest);
+    }
+
+    if (res.error && res.error.message.includes('price')) {
+      const { price, ...rest } = payload;
       res = await supabase.from('question_paper_groups').insert(rest);
     }
 
@@ -336,6 +343,11 @@ export const dbService = {
 
     if (res.error && res.error.message.includes('numSubjectsPerSchedule')) {
       const { numSubjectsPerSchedule, ...rest } = payload;
+      res = await supabase.from('question_paper_groups').update(rest).eq('id', id).select().maybeSingle();
+    }
+
+    if (res.error && res.error.message.includes('price')) {
+      const { price, ...rest } = payload;
       res = await supabase.from('question_paper_groups').update(rest).eq('id', id).select().maybeSingle();
     }
 

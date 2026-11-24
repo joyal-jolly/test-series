@@ -119,7 +119,7 @@ async function getEmailConfig() {
   )?.trim();
   const rawFrom =
     (process.env.EMAIL_FROM || cfEnv.EMAIL_FROM)?.trim() ||
-    'Mentaura CA <onboarding@resend.dev>';
+    (brevoKey ? 'joyaljolly47@gmail.com' : 'Mentaura CA <onboarding@resend.dev>');
 
   return { resendKey, brevoKey, rawFrom };
 }
@@ -129,6 +129,10 @@ async function getEmailConfig() {
  * If no key is configured in dev, logs the code gracefully.
  */
 export async function sendOtpEmail({ email, otp }) {
+  console.log('\n======================================================');
+  console.log(`[OTP GENERATED] 🔑 4-digit code for ${email}: >>> ${otp} <<<`);
+  console.log('======================================================\n');
+
   const { resendKey, brevoKey, rawFrom } = await getEmailConfig();
   const subject = `${otp} is your Mentaura CA verification code`;
   const html = getEmailTemplate({ otp, recipientEmail: email });

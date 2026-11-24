@@ -157,6 +157,7 @@ export function AdminPapers() {
     name: '',
     description: '',
     caLevel: 'Intermediate',
+    price: 100,
     numSchedules: 5,
     numSubjectsPerSchedule: 3,
   });
@@ -177,6 +178,12 @@ export function AdminPapers() {
   const [scheduleDateError, setScheduleDateError] = useState('');
   const [scheduleDateLoading, setScheduleDateLoading] = useState(false);
 
+  // Paper Date/Time modal (optional schedule for an individual paper)
+  const [paperDateModal, setPaperDateModal] = useState(null);
+  const [paperDateForm, setPaperDateForm] = useState({ availableDate: '', availableTime: '' });
+  const [paperDateError, setPaperDateError] = useState('');
+  const [paperDateLoading, setPaperDateLoading] = useState(false);
+
   // Upload/edit paper modal for a schedule slot
   const [paperModal, setPaperModal] = useState(null);
   const [paperForm, setPaperForm] = useState({
@@ -187,6 +194,8 @@ export function AdminPapers() {
     chapter: '',
     totalMarks: 100,
     durationMinutes: 180,
+    availableDate: '',
+    availableTime: '',
   });
   const [paperPdf, setPaperPdf] = useState(null);
   const [paperError, setPaperError] = useState('');
@@ -221,12 +230,13 @@ export function AdminPapers() {
           name: groupForm.name,
           description: groupForm.description,
           caLevel: groupForm.caLevel || 'Intermediate',
+          price: Number(groupForm.price) || 0,
           numSchedules: Number(groupForm.numSchedules),
           numSubjectsPerSchedule: Number(groupForm.numSubjectsPerSchedule),
         },
       });
       setGroupMessage('Group created successfully.');
-      setGroupForm({ name: '', description: '', caLevel: 'Intermediate', numSchedules: 5, numSubjectsPerSchedule: 3 });
+      setGroupForm({ name: '', description: '', caLevel: 'Intermediate', price: 100, numSchedules: 5, numSubjectsPerSchedule: 3 });
       setShowCreateGroup(false);
       reload();
     } catch (err) {
@@ -255,6 +265,7 @@ export function AdminPapers() {
           name: editingGroup.name,
           description: editingGroup.description,
           caLevel: editingGroup.caLevel || 'Intermediate',
+          price: Number(editingGroup.price) || 0,
           numSchedules: Number(editingGroup.numSchedules),
           numSubjectsPerSchedule: Number(editingGroup.numSubjectsPerSchedule),
         },
@@ -307,9 +318,68 @@ export function AdminPapers() {
     }
   }
 
+  // ── Open Paper Date/Time Modal (Quick-schedule for a specific paper) ──
+  function openPaperDateModal(paper) {
+    let dStr = '';
+    let tStr = '';
+    if (paper.availableAt) {
+      const d = new Date(paper.availableAt);
+      const pad = (n) => String(n).padStart(2, '0');
+      dStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      tStr = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    setPaperDateForm({
+      availableDate: dStr,
+      availableTime: tStr,
+    });
+    setPaperDateError('');
+    setPaperDateModal({
+      paperId: paper.id,
+      title: paper.title,
+      subjectName: paper.subjectName,
+    });
+  }
+
+  // ── Save Paper Date/Time ──
+  async function savePaperDate(e) {
+    e.preventDefault();
+    setPaperDateError('');
+    setPaperDateLoading(true);
+    try {
+      let iso = null;
+      if (paperDateForm.availableDate) {
+        const timeStr = paperDateForm.availableTime || '00:00';
+        iso = new Date(`${paperDateForm.availableDate}T${timeStr}:00`).toISOString();
+      }
+
+      await api(`/api/admin/papers/${paperDateModal.paperId}`, {
+        method: 'PATCH',
+        body: { availableAt: iso || '' },
+      });
+
+      setPaperDateModal(null);
+      reload();
+    } catch (err) {
+      setPaperDateError(err.message);
+    } finally {
+      setPaperDateLoading(false);
+    }
+  }
+
   // ── Open Paper Modal (Upload or Edit) ──
   function openPaperModal(groupId, groupName, scheduleNumber, existingPaper, scheduleAvailableAt, existingPapers = []) {
+    let pDate = '';
+    let pTime = '';
+
     if (existingPaper) {
+      if (existingPaper.availableAt) {
+        const d = new Date(existingPaper.availableAt);
+        const pad = (n) => String(n).padStart(2, '0');
+        pDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        pTime = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
       setPaperForm({
         title: existingPaper.title || '',
         subjectId: existingPaper.subjectId || subjects[0]?.id || '',
@@ -318,6 +388,8 @@ export function AdminPapers() {
         chapter: existingPaper.chapter || '',
         totalMarks: existingPaper.totalMarks || 100,
         durationMinutes: existingPaper.durationMinutes || 180,
+        availableDate: pDate,
+        availableTime: pTime,
       });
     } else {
       const targetGroup = groups.find((g) => g.id === groupId) || selectedGroup;
@@ -337,6 +409,8 @@ export function AdminPapers() {
         chapter: '',
         totalMarks: 100,
         durationMinutes: 180,
+        availableDate: '',
+        availableTime: '',
       });
     }
     setPaperPdf(null);
@@ -367,6 +441,15 @@ export function AdminPapers() {
       body.append('durationMinutes', paperForm.durationMinutes);
       body.append('status', 'published');
 
+      // Optional schedule: if set, schedule at ISO; if empty, publish immediately
+      if (paperForm.availableDate) {
+        const timeStr = paperForm.availableTime || '00:00';
+        const paperIso = new Date(`${paperForm.availableDate}T${timeStr}:00`).toISOString();
+        body.append('availableAt', paperIso);
+      } else {
+        body.append('availableAt', '');
+      }
+
       if (paperPdf) body.append('pdf', paperPdf);
 
       if (paperModal.existingPaper) {
@@ -379,9 +462,6 @@ export function AdminPapers() {
         // Create new paper for this schedule
         body.append('groupId', paperModal.groupId);
         body.append('scheduleNumber', paperModal.scheduleNumber);
-        if (paperModal.scheduleAvailableAt) {
-          body.append('availableAt', paperModal.scheduleAvailableAt);
-        }
         await api('/api/admin/papers', { method: 'POST', body });
       }
 
@@ -502,6 +582,20 @@ export function AdminPapers() {
                 e.g. 3 subjects (3 papers uploaded per schedule)
               </span>
             </label>
+            <label>
+              Price (₹)
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="100"
+                value={groupForm.price}
+                onChange={(e) => setGroupForm({ ...groupForm, price: e.target.value })}
+              />
+              <span className="muted" style={{ fontSize: '0.8rem' }}>
+                Strikethrough amount displayed alongside the FREE badge (e.g. 100)
+              </span>
+            </label>
             {groupError && <p className="error">{groupError}</p>}
             <button className="btn primary" style={{ marginTop: '0.5rem' }}>Create Group</button>
           </form>
@@ -563,6 +657,9 @@ export function AdminPapers() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
                   <span className="pill info" style={{ fontSize: '0.78rem' }}>
                     {g.numSchedules} Schedules
+                  </span>
+                  <span className="pill" style={{ fontSize: '0.78rem', background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' }}>
+                    {Number(g.price) > 0 ? `₹${g.price}` : '100 Rs'} · Free
                   </span>
                   <button
                     type="button"
@@ -680,6 +777,7 @@ export function AdminPapers() {
                                   <th style={{ minWidth: '10.5rem' }}>Paper Title</th>
                                   <th style={{ minWidth: '6rem' }}>Subject Type</th>
                                   <th style={{ minWidth: '7.5rem' }}>Marks &amp; Duration</th>
+                                  <th style={{ minWidth: '10rem' }}>Scheduled Access</th>
                                   <th style={{ textAlign: 'right', minWidth: '9rem' }}>Actions</th>
                                 </tr>
                               </thead>
@@ -699,6 +797,25 @@ export function AdminPapers() {
                                     </td>
                                     <td>
                                       <span className="admin-paper-marks">{p.totalMarks} marks · {p.durationMinutes} min</span>
+                                    </td>
+                                    <td>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                        <span style={{ fontSize: '0.84rem' }}>
+                                          {p.availableAt ? (
+                                            <strong>{formatScheduleDate(p.availableAt)}</strong>
+                                          ) : (
+                                            <span className="muted">Immediate</span>
+                                          )}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          className="btn subtle admin-table-btn"
+                                          style={{ fontSize: '0.74rem', padding: '0.15rem 0.45rem', width: 'fit-content' }}
+                                          onClick={() => openPaperDateModal(p)}
+                                        >
+                                          🕒 {p.availableAt ? 'Change Time' : 'Schedule'}
+                                        </button>
+                                      </div>
                                     </td>
                                     <td style={{ textAlign: 'right' }}>
                                       <div className="table-actions admin-paper-actions">
@@ -858,6 +975,20 @@ export function AdminPapers() {
                   required
                 />
               </label>
+              <label>
+                Price (₹)
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="100"
+                  value={editingGroup.price ?? 100}
+                  onChange={(e) => setEditingGroup({ ...editingGroup, price: e.target.value })}
+                />
+                <span className="muted" style={{ fontSize: '0.8rem' }}>
+                  Strikethrough amount displayed alongside the FREE badge (e.g. 100)
+                </span>
+              </label>
               {editGroupError && <p className="error">{editGroupError}</p>}
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
                 <button type="button" className="btn ghost" onClick={() => setEditingGroup(null)}>Cancel</button>
@@ -981,6 +1112,28 @@ export function AdminPapers() {
                 </label>
               </div>
 
+              <div className="row-2">
+                <label>
+                  Scheduled Open Date (optional)
+                  <input
+                    type="date"
+                    value={paperForm.availableDate}
+                    onChange={(e) => setPaperForm({ ...paperForm, availableDate: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Scheduled Open Time (optional)
+                  <input
+                    type="time"
+                    value={paperForm.availableTime}
+                    onChange={(e) => setPaperForm({ ...paperForm, availableTime: e.target.value })}
+                  />
+                </label>
+              </div>
+              <span className="muted" style={{ fontSize: '0.8rem', display: 'block', marginTop: '-0.35rem', marginBottom: '0.85rem' }}>
+                Optional: Leave blank to publish immediately without scheduling.
+              </span>
+
               {paperModal.existingPaper?.pdfUrl && (
                 <label>
                   Current PDF
@@ -1007,6 +1160,65 @@ export function AdminPapers() {
                 <button type="button" className="btn ghost" onClick={() => setPaperModal(null)}>Cancel</button>
                 <button type="submit" className="btn primary" disabled={paperLoading}>
                   {paperLoading ? 'Saving…' : paperModal.existingPaper ? 'Save Changes' : 'Upload & Publish'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Individual Paper Date/Time Modal ── */}
+      {paperDateModal && (
+        <div className="modal-backdrop" onClick={() => setPaperDateModal(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-head">
+              <h2>Schedule Paper &ndash; {paperDateModal.subjectName || paperDateModal.title}</h2>
+              <button
+                type="button"
+                className="btn subtle"
+                onClick={() => setPaperDateModal(null)}
+                style={{ padding: '0.35rem 0.75rem', borderRadius: '50%' }}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="muted" style={{ fontSize: '0.85rem', margin: '0 0 1rem' }}>
+              Set when <strong>&quot;{paperDateModal.title}&quot;</strong> opens for students. Leave blank for immediate access.
+            </p>
+            <form className="form" onSubmit={savePaperDate}>
+              <div className="row-2">
+                <label>
+                  Scheduled Date (optional)
+                  <input
+                    type="date"
+                    value={paperDateForm.availableDate}
+                    onChange={(e) => setPaperDateForm({ ...paperDateForm, availableDate: e.target.value })}
+                  />
+                </label>
+                <label>
+                  Scheduled Time (optional)
+                  <input
+                    type="time"
+                    value={paperDateForm.availableTime}
+                    onChange={(e) => setPaperDateForm({ ...paperDateForm, availableTime: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              {paperDateError && <p className="error">{paperDateError}</p>}
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => {
+                    setPaperDateForm({ availableDate: '', availableTime: '' });
+                  }}
+                >
+                  Clear (Immediate)
+                </button>
+                <button type="submit" className="btn primary" disabled={paperDateLoading}>
+                  {paperDateLoading ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </form>

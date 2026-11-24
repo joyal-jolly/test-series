@@ -309,7 +309,9 @@ export default function PapersPage() {
 
                       {/* Price badges */}
                       <div className="paper-pricing">
-                        <span className="paper-original-price">100 Rs</span>
+                        <span className="paper-original-price">
+                          {Number(g.price) > 0 ? `₹${g.price}` : '100 Rs'}
+                        </span>
                         <span className="paper-free-badge">FREE</span>
                       </div>
                     </div>

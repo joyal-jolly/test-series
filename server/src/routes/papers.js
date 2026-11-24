@@ -47,6 +47,8 @@ router.get('/groups', optionalAuth, async (_req, res, next) => {
 
         const enrichedPapers = schedPapers.map((paper) => {
           const subject = subjects.find((s) => s.id === paper.subjectId);
+          const paperAvail = paper.availableAt || availableAt;
+          const paperIsAvail = paperAvail ? new Date(paperAvail) <= now : true;
           return {
             id: paper.id,
             title: paper.title,
@@ -57,8 +59,8 @@ router.get('/groups', optionalAuth, async (_req, res, next) => {
             chapter: paper.chapter || '',
             totalMarks: paper.totalMarks,
             durationMinutes: paper.durationMinutes,
-            availableAt,
-            isAvailable,
+            availableAt: paperAvail,
+            isAvailable: paperIsAvail,
           };
         });
 
@@ -77,6 +79,7 @@ router.get('/groups', optionalAuth, async (_req, res, next) => {
         name: g.name,
         description: g.description,
         caLevel: g.caLevel || 'Intermediate',
+        price: Number(g.price) || 0,
         numSchedules: g.numSchedules,
         numSubjectsPerSchedule: maxSubjects,
         schedules,
@@ -117,6 +120,8 @@ router.get('/groups/:groupId', optionalAuth, async (req, res, next) => {
 
       const enrichedPapers = schedPapers.map((paper) => {
         const subject = subjects.find((s) => s.id === paper.subjectId);
+        const paperAvail = paper.availableAt || availableAt;
+        const paperIsAvail = paperAvail ? new Date(paperAvail) <= now : true;
         return {
           id: paper.id,
           title: paper.title,
@@ -128,8 +133,8 @@ router.get('/groups/:groupId', optionalAuth, async (req, res, next) => {
           chapter: paper.chapter || '',
           totalMarks: paper.totalMarks,
           durationMinutes: paper.durationMinutes,
-          availableAt,
-          isAvailable,
+          availableAt: paperAvail,
+          isAvailable: paperIsAvail,
         };
       });
 
@@ -149,6 +154,7 @@ router.get('/groups/:groupId', optionalAuth, async (req, res, next) => {
         name: group.name,
         description: group.description,
         caLevel: group.caLevel || 'Intermediate',
+        price: Number(group.price) || 0,
         numSchedules: group.numSchedules,
         numSubjectsPerSchedule: maxSubjects,
         schedules,

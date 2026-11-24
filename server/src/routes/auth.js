@@ -58,6 +58,7 @@ router.post('/send-otp', async (req, res) => {
     return res.json({
       message: `A 4-digit verification code was sent to ${normalized}.`,
       otpToken,
+      ...(process.env.NODE_ENV !== 'production' ? { devOtp: otp } : {}),
     });
   } catch (err) {
     console.error('[send-otp Error]:', err);
@@ -177,6 +178,7 @@ router.post('/send-change-password-otp', requireAuth, async (req, res) => {
     return res.json({
       message: `A verification code was sent to ${user.email}.`,
       otpToken,
+      ...(process.env.NODE_ENV !== 'production' ? { devOtp: otp } : {}),
     });
   } catch (err) {
     console.error('[send-change-password-otp Error]:', err);
